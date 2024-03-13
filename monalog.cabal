@@ -1,0 +1,122 @@
+cabal-version:      3.0
+name:               monalog
+version:            0.1.0.0
+synopsis:
+author:             goosedb
+maintainer:         goosedb@yandex.ru
+
+library
+  -- cabal-fmt: expand src
+  exposed-modules:
+    App
+    Handler
+    Path
+    Query
+    Query.Eval
+    Query.Parser
+    Type.AppState
+    Type.AvailableSpace
+    Type.Config
+    Type.Event
+    Type.Field
+    Type.Log
+    Type.MaxWidth
+    Type.Name
+    Type.TBool
+    Type.With
+    Ui
+    Vty
+    Widgets.Checkbox
+    Widgets.Error.Handler
+    Widgets.Error.Types
+    Widgets.Error.Ui
+    Widgets.Fields.Handler
+    Widgets.Fields.Types
+    Widgets.Fields.Ui
+    Widgets.LogsView.Handler
+    Widgets.LogsView.Types
+    Widgets.LogsView.Ui
+    Widgets.LogView.Handler
+    Widgets.LogView.Types
+    Widgets.LogView.Ui
+    Widgets.Query.Handler
+    Widgets.Query.Types
+    Widgets.Query.Ui
+    Widgets.Scrollbar.Horizontal
+    Widgets.Scrollbar.Vertical
+    Widgets.StatusBar.Handler
+    Widgets.StatusBar.Types
+    Widgets.StatusBar.Ui
+
+  build-depends:
+    , aeson
+    , base
+    , brick               >=2.2 && <3.0
+    , brick-skylighting
+    , bytestring
+    , conduit
+    , containers
+    , fuzzy
+    , generic-lens
+    , lens
+    , lens-aeson
+    , megaparsec
+    , mtl
+    , parser-combinators
+    , scientific
+    , skylighting
+    , skylighting-core
+    , stm
+    , text
+    , text-zipper
+    , time
+    , transformers
+    , vector
+    , vty
+    , vty-crossplatform
+    , word-wrap
+    , yaml
+
+  if os(windows)
+    build-depends: vty-windows >=0.2.0.2 && <0.3.0.0
+
+  else
+    build-depends:
+      , unix
+      , vty-unix
+
+  hs-source-dirs:     src
+  default-language:   GHC2021
+  ghc-options:        -Wall
+  default-extensions:
+    AllowAmbiguousTypes
+    BlockArguments
+    ConstraintKinds
+    DeriveAnyClass
+    DeriveGeneric
+    DuplicateRecordFields
+    FlexibleContexts
+    ImplicitParams
+    ImportQualifiedPost
+    LambdaCase
+    MultiWayIf
+    NamedFieldPuns
+    OverloadedLabels
+    OverloadedRecordDot
+    OverloadedStrings
+    RecordWildCards
+    StrictData
+    TypeApplications
+    TypeFamilies
+    ViewPatterns
+
+executable monalog
+  main-is:          Main.hs
+  build-depends:
+    , base
+    , monalog
+    , optparse-applicative
+
+  ghc-options:      -threaded -O2
+  hs-source-dirs:   app
+  default-language: Haskell2010
