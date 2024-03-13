@@ -1,6 +1,6 @@
 # Monaλog
 
-Monalog is terminal log viewer. It currently supports only json input (either from file or with pipe)
+Monalog is terminal logs observer. It currently supports only json input (either from file or with pipe)
 
 ## Installation
   1. Clone the repo
@@ -17,7 +17,7 @@ or from file:
 monalog logs.json
 ```
 ## Usage
-* To exit use Ctrl+d/
+* To exit use Ctrl+d
 * Mouse wheel to scroll vertically
 * Mouse wheel + Ctrl to scroll horizontally when not all of columns fit in viewport
 * Click on log entry twice to see whole one
