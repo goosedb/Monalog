@@ -26,4 +26,4 @@ monalog logs.json
 ## Demo
 ![Demo](./demo.gif)
 ---
-Thanks to @ShrykeWindgrace for help with Windows support implementation
+Thanks to [@ShrykeWindgrace](https://github.com/ShrykeWindgrace) for help with Windows support implementation
