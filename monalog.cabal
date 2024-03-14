@@ -1,9 +1,9 @@
-cabal-version:      3.0
-name:               monalog
-version:            0.1.0.0
+cabal-version: 3.0
+name:          monalog
+version:       0.1.0.0
 synopsis:
-author:             goosedb
-maintainer:         goosedb@yandex.ru
+author:        goosedb
+maintainer:    goosedb@yandex.ru
 
 library
   -- cabal-fmt: expand src
@@ -14,6 +14,9 @@ library
     Query
     Query.Eval
     Query.Parser
+    SourceFormat.Csv
+    SourceFormat.Json
+    SourceFormat.Utils
     Type.AppState
     Type.AvailableSpace
     Type.Config
@@ -50,23 +53,23 @@ library
 
   build-depends:
     , aeson
+    , attoparsec
     , base
-    , brick               >=2.2 && <3.0
+    , brick                >=2.2 && <3.0
     , brick-skylighting
     , bytestring
+    , cassava
     , conduit
     , containers
+    , effectful
     , fuzzy
     , generic-lens
     , lens
     , lens-aeson
     , megaparsec
-    , attoparsec
-    , cassava
     , mtl
-    , effectful
-    , resourcet-effectful
     , parser-combinators
+    , resourcet-effectful
     , scientific
     , skylighting
     , skylighting-core

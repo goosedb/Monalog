@@ -2,6 +2,8 @@ module Handler (handleEvent) where
 
 import Brick qualified as B
 import Brick.BChan qualified as B
+import Conduit (MonadIO (..))
+import Control.Exception (throwIO)
 import Control.Lens
 import Control.Monad (when)
 import Data.Generics.Labels ()
@@ -25,8 +27,6 @@ import Widgets.Query.Handler qualified as Query
 import Widgets.Query.Types qualified as Query
 import Widgets.StatusBar.Handler qualified as StatusBar
 import Widgets.StatusBar.Types qualified as StatusBar
-import Conduit (MonadIO(..))
-import Control.Exception (throwIO)
 
 handleEvent :: B.BChan Event -> B.BrickEvent Name Event -> B.EventM Name AppState ()
 handleEvent ch e = do
@@ -35,9 +35,9 @@ handleEvent ch e = do
   logView <- use #logView
   case e of
     B.AppEvent ae -> case ae of
-      FatalError txt -> do 
+      FatalError txt -> do
         B.halt
-        liftIO $ throwIO txt 
+        liftIO $ throwIO txt
       NewLog l -> do
         callFieldsWidget (Fields.NewLog l)
         callLogsViewWidget (LogsView.NewLog l)
