@@ -18,11 +18,11 @@ withVty :: (Vty.Vty -> IO a) -> IO a
 withVty action = do
 #if defined(mingw32_HOST_OS) || defined(__MINGW32__)
   -- https://github.com/microsoft/terminal/issues/16868
-  withFile "\\\\.\\CONIN$" ReadWriteMode \ttyHandle -> do
+  withFile "\\\\.\\CONIN$" ReadWriteMode \tty -> do
 #else
   withFile "/dev/tty" ReadMode \ttyHandle -> do
-#endif
     tty <- handleToFd ttyHandle
+#endif
     defSettings <- Vty.defaultSettings
     vty <- Vty.mkVtyWithSettings Vty.defaultConfig defSettings{Vty.settingInputFd = tty}
-    action vty 
+    action vty
