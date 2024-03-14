@@ -61,7 +61,11 @@ library
     , lens
     , lens-aeson
     , megaparsec
+    , attoparsec
+    , cassava
     , mtl
+    , effectful
+    , resourcet-effectful
     , parser-combinators
     , scientific
     , skylighting
