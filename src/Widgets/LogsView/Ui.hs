@@ -96,8 +96,8 @@ logsViewWidgetDraw availableSpace LogsViewWidget{..} = B.clickable (mkName LogsV
   logRow (i, l@Log{..}) =
     let drawColumn field = drawLogsViewLogField field l B.<+> B.fill ' '
         logNum = B.hLimit logNumberWidth $ B.str (" " <> show i) B.<+> B.fill ' '
-        highlight = if clickedLog == Just idx then B.modifyDefAttr (\V.Attr{..} -> V.Attr{attrStyle = V.SetTo V.reverseVideo, ..}) else id
-        name = mkName $ LogsViewWidgetLogEntry idx
+        highlight = if ((.idx) . snd <$> selectedLog) == Just idx then B.modifyDefAttr (\V.Attr{..} -> V.Attr{attrStyle = V.SetTo V.reverseVideo, ..}) else id
+        name = mkName $ LogsViewWidgetLogEntry (MkLineNumber i) idx
      in B.clickable name
           . B.cached name
           . highlight

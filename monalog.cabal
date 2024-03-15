@@ -66,6 +66,7 @@ library
     , generic-lens
     , lens
     , lens-aeson
+    , filepath
     , megaparsec
     , mtl
     , parser-combinators

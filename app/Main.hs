@@ -1,3 +1,4 @@
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE LambdaCase #-}
 
 module Main where
@@ -13,15 +14,15 @@ parseArgs =
     <$> ( fromMaybe Stdin
             <$> optional (File <$> argument str (metavar "FILE"))
         )
-    <*> ( fromMaybe Json
-            <$> optional
-              ( option
-                  ( maybeReader
-                      (\case "json" -> Just Json; "csv" -> Just Csv; _ -> Nothing)
-                  )
-                  (long "format" <> short 'f')
-              )
-        )
+    <*> optional
+      ( option
+          ( maybeReader \case
+              "json" -> Just Json
+              "csv" -> Just Csv
+              _ -> Nothing
+          )
+          (long "format" <> short 'f')
+      )
 
 main :: IO ()
 main = execParser (info (parseArgs <**> helper) fullDesc) >>= app

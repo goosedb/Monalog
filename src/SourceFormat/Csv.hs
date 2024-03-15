@@ -19,9 +19,9 @@ import Data.Word (Word8)
 import Effectful (Eff, (:>))
 import Effectful qualified as Eff
 import Effectful.State.Static.Local qualified as Eff
-import SourceFormat.Utils
+import SourceFormat.Utils (packLog)
 import System.IO (Handle)
-import Type.Log
+import Type.Log (Log)
 
 csvReader :: (Eff.IOE :> es, Eff.State Int :> es) => Handle -> IO (C.ConduitT () Log (Eff es) ())
 csvReader handle = do
@@ -33,10 +33,13 @@ csvReader handle = do
         ( \logStr -> do
             row <- runParseRecord logStr
             let toLazy = Bytes.Lazy.fromStrict
-            let utf8 = Text.Encoding.decodeUtf8
+            let utf8Str = J.String . Text.Encoding.decodeUtf8
             pure
               . J.object
-              $ zipWith (\k v -> k J..= fromMaybe @J.Value (J.String $ utf8 v) (decode $ toLazy v)) header row
+              $ zipWith
+                do \k v -> k J..= fromMaybe (utf8Str v) (decode $ toLazy v)
+                do header
+                do row
         )
       C..| packLog
  where
@@ -50,7 +53,7 @@ csvReader handle = do
 parseHeader :: Word8 -> Bytes.ByteString -> IO [Key.Key]
 parseHeader delim rawHeader = map (Key.fromText . Text.Encoding.decodeUtf8) <$> runParseHeader (rawHeader <> "\n")
  where
-  errorText = "Invalid csv header"
+  errorText = "Invalid CSV header"
   headerError = ErrorCall errorText
   runParseHeader i = either
     do const $ throwIO headerError

@@ -1,3 +1,4 @@
+{-# LANGUAGE DerivingStrategies #-}
 module Type.Log where
 
 import Data.Aeson (Value)
@@ -6,7 +7,9 @@ import Data.Vector qualified as Vec
 import Data.Vector.Mutable qualified as MVec
 import GHC.Generics (Generic)
 
-data Log = Log {idx :: Int, timestamp :: UTCTime, value :: Value}
+newtype Idx = Idx { rawIdx :: Int }
+  deriving newtype (Show, Eq, Ord)
+data Log = Log {idx :: Idx, timestamp :: UTCTime, value :: Value}
   deriving (Show)
 
 data Mutable

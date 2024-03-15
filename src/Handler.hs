@@ -27,6 +27,7 @@ import Widgets.Query.Handler qualified as Query
 import Widgets.Query.Types qualified as Query
 import Widgets.StatusBar.Handler qualified as StatusBar
 import Widgets.StatusBar.Types qualified as StatusBar
+import Widgets.Types (PackedLens'(PackedLens'))
 
 handleEvent :: B.BChan Event -> B.BrickEvent Name Event -> B.EventM Name AppState ()
 handleEvent ch e = do
@@ -86,6 +87,7 @@ handleEvent ch e = do
         let mbEv = case e of
               B.VtyEvent (V.EvMouseDown _ _ V.BScrollDown mods) -> Just $ logsScrollEvent 1 mods
               B.VtyEvent (V.EvMouseDown _ _ V.BScrollUp mods) -> Just $ logsScrollEvent (-1) mods
+              B.VtyEvent (V.EvKey k mods) -> Just $ LogsView.Key k mods
               _ -> Nothing
         maybe (pure ()) callLogsViewWidget mbEv
       AS.LogWidgetName : _ -> do
@@ -128,29 +130,39 @@ handleEvent ch e = do
     StatusBar.statusBarWidgetHandleEvent
       #statusBar
       StatusBar.StatusBarWidgetCallbacks
-        { goToTop = callLogsViewWidget LogsView.GoToTop
-        , goToBottom = callLogsViewWidget LogsView.GoToBottom
-        , goTo = callLogsViewWidget . LogsView.GoTo
-        , changeFollowLogs = callLogsViewWidget . LogsView.FollowLogs
+        { goToTop = do
+            activateLogsView
+            callLogsViewWidget LogsView.GoToTop
+        , goToBottom = do
+            activateLogsView
+            callLogsViewWidget LogsView.GoToBottom
+        , goTo = \l -> do
+            activateLogsView
+            callLogsViewWidget $ LogsView.GoTo l
+        , changeFollowLogs = \f -> do
+            activateLogsView
+            callLogsViewWidget $ LogsView.FollowLogs f
         }
 
   callFieldsWidget = Fields.fieldsWidgetHandleEvent
     do #fieldsView
     do fieldsWidgetCallbacks
 
-  callLogsViewWidget = LogsView.logsViewWidgetHandleEvent
-    do #logsView
-    do
-      LogsView.LogsViewWidgetCallbacks
-        { topLineChanged = callStatusBarWidget . StatusBar.ChangeTopLine
-        , totalLinesChanged = callStatusBarWidget . StatusBar.ChangeTotalLines
-        , logAddedToView = callStatusBarWidget StatusBar.NewLog
-        , selectedLog = \l -> do
-            B.invalidateCache
-            #logView .= Just (LogView.LogViewWidget l)
-            callLogViewWidget (LogView.LogSelected l)
-        , resetFollow = callStatusBarWidget StatusBar.ResetFollow
-        }
+  callLogsViewWidget = 
+    let ?callbacks = LogsView.LogsViewWidgetCallbacks
+            { topLineChanged = callStatusBarWidget . StatusBar.ChangeTopLine
+            , totalLinesChanged = callStatusBarWidget . StatusBar.ChangeTotalLines
+            , selectedLogChanged = \_ -> pure ()
+            , logAddedToView = callStatusBarWidget StatusBar.NewLog
+            , selectedLog = \l -> do
+                B.invalidateCache
+                #logView .= (LogView.LogViewWidget <$> l)
+                maybe (pure ()) (callLogViewWidget . LogView.LogSelected) l
+            , resetFollow = callStatusBarWidget StatusBar.ResetFollow
+            }
+        ?widgetState = PackedLens' #logsView
+    in LogsView.logsViewWidgetHandleEvent
+
 
   callErrorWidget = Error.errorWidgetHandleEvent
     do errorWidgetCallbacks
@@ -165,7 +177,9 @@ handleEvent ch e = do
 
   queryWidgetCallbacks =
     Query.QueryWidgetCallbacks
-      { Query.execFilter = callLogsViewWidget . LogsView.RunFilter ch
+      { Query.execFilter = \q -> do
+          activateLogsView
+          callLogsViewWidget $ LogsView.RunFilter ch q
       , Query.clearFilter = callLogsViewWidget LogsView.ClearFilter
       , Query.showError = \txt -> do
           #activeWidget %= (AS.ErrorWidgetName (Error.ErrorWidget txt) :)
@@ -197,3 +211,5 @@ handleEvent ch e = do
             AS.ErrorWidgetName _ -> False
             _ -> True
       }
+
+  activateLogsView = #activeWidget .= [AS.LogsWidgetName]

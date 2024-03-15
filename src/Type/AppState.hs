@@ -51,7 +51,7 @@ initialState = do
           LogsViewWidget
             { allLogs = MutableLogs allLogs 0
             , filteredLogs = MutableLogs filteredLogs 0
-            , clickedLog = Nothing
+            , selectedLog = Nothing
             , selectedFields = []
             , visibleLogs = ImmutableLogs mempty
             , topLine = initialTopLine

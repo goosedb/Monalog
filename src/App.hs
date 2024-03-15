@@ -10,8 +10,6 @@ import Conduit (MonadIO (..))
 import Control.Concurrent (forkIO)
 import Control.Exception (finally)
 import Control.Monad (void)
-import Data.ByteString qualified as Bytes
-import Data.Char (ord)
 import Data.Conduit qualified as C
 import Data.Conduit.Combinators qualified as C
 import Data.Generics.Labels ()
@@ -26,6 +24,7 @@ import Handler (handleEvent)
 import Skylighting qualified as S
 import SourceFormat.Csv qualified as Csv
 import SourceFormat.Json qualified as Json
+import System.FilePath qualified as Path
 import System.IO (IOMode (ReadMode), stdin, withFile)
 import Type.AppState
 import Type.Event
@@ -38,13 +37,13 @@ data Format = Json | Csv
 
 data AppArguments = AppArguments
   { input :: Input
-  , format :: Format
+  , format :: Maybe Format
   }
 
 app :: AppArguments -> IO ()
 app AppArguments{..} = withVty \vty -> do
   ch <- newBChan maxBound
-  let withStream handle action = case format of
+  let withStream handle action = case reifyFormat format input of
         Json -> action (Json.jsonReader handle)
         Csv -> Csv.csvReader handle >>= action
   let withLogsHandle action = case input of
@@ -58,11 +57,12 @@ app AppArguments{..} = withVty \vty -> do
               . Eff.runResource
               . Eff.evalState (1 :: Int)
               . C.runConduit
-      void $
-        forkIO . runConduit $
-          logsStream
-            C..| C.mapM (liftIO . writeBChan ch . NewLog)
-            C..| C.sinkNull
+      void
+        . forkIO
+        . runConduit
+        $ logsStream
+          C..| C.mapM (liftIO . writeBChan ch . NewLog)
+          C..| C.sinkNull
 
       freshState <- initialState
 
@@ -90,3 +90,12 @@ brickApp ch =
         liftIO $ V.setMode output V.Mouse True
     , appAttrMap = const $ B.attrMap V.defAttr (B.attrMappingsForStyle S.pygments)
     }
+
+reifyFormat :: Maybe Format -> Input -> Format
+reifyFormat format input = case format of
+  Just fmt -> fmt
+  Nothing | File path <- input ->
+    case Path.takeExtension path of
+      ".csv" -> Csv
+      _ -> Json
+  _ -> Json

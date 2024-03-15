@@ -6,6 +6,7 @@ import Control.Concurrent (ThreadId)
 import Control.Concurrent.STM (TQueue)
 import Data.Generics.Labels ()
 import GHC.Generics (Generic)
+import Graphics.Vty qualified as V
 import Query (Query)
 import Type.Event qualified as E
 import Type.Field (Field (..))
@@ -24,7 +25,7 @@ data ActiveLogs = All | Filtered
 data LogsViewWidget = LogsViewWidget
   { allLogs :: Logs Mutable
   , filteredLogs :: Logs Mutable
-  , clickedLog :: Maybe Int
+  , selectedLog :: Maybe (LineNumber, Log)
   , selectedFields :: [SelectedField]
   , visibleLogs :: Logs Immutable
   , topLine :: Int
@@ -39,6 +40,7 @@ data LogsWidgetEvent
   = Click LogsViewWidgetName
   | Scroll Int
   | AltScroll Int
+  | Key V.Key [V.Modifier]
   | NewLog Log
   | FilteredLog Log
   | RunFilter (B.BChan E.Event) Query
@@ -58,9 +60,13 @@ data LogsViewWidgetCallbacks s = LogsViewWidgetCallbacks
   { topLineChanged :: ~(Int -> B.EventM Name s ())
   , logAddedToView :: ~(B.EventM Name s ())
   , totalLinesChanged :: ~(Int -> B.EventM Name s ())
-  , selectedLog :: ~(Log -> B.EventM Name s ())
+  , selectedLog :: ~(Maybe Log -> B.EventM Name s ())
+  , selectedLogChanged :: ~(Log -> B.EventM Name s ())
   , resetFollow :: ~(B.EventM Name s ())
   }
 
 mkName :: LogsViewWidgetName -> Name
 mkName = WidgetName . LogsViewWidgetName
+
+minimalTopLine :: Int
+minimalTopLine = 1

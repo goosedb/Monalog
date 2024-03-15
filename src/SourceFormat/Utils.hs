@@ -16,5 +16,5 @@ packLog =
         idx <- Eff.get
         now <- liftIO getCurrentTime
         Eff.modify @Int (+ 1)
-        pure $ Log idx now json
+        pure $ Log (Idx idx) now json
     )
