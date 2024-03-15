@@ -27,11 +27,11 @@ type Ctx s = (WithWidgetContext s LogsViewWidgetCallbacks LogsViewWidget)
 logsViewWidgetHandleEvent :: (Ctx s) => LogsWidgetEvent -> B.EventM Name s ()
 logsViewWidgetHandleEvent e = do
   case e of
-    Scroll (signum -> int) -> goTo (Relative int)
+    Scroll (signum -> int) -> move int
     AltScroll (signum -> int) -> scrollHorizontally int
     Key key mods -> handleKeyboardEvent key mods
     Click (LogsViewWidgetFieldMove dir) -> handleMoveClick dir
-    Click (LogsViewWidgetLogEntry lineNumber idx) -> getLogById idx >>= select lineNumber
+    Click (LogsViewWidgetLogEntry lineNumber _) -> handleSelect lineNumber
     NewLog l -> do
       B.zoom widgetState do
         B.zoom #allLogs (addLog l)
@@ -159,12 +159,7 @@ handleKeyboardEvent key _ = case key of
     'J' -> move (-longScroll)
     'k' -> move shortScroll
     'K' -> move longScroll
-    's' -> use (widgetState . #selectedLog) >>= maybe 
-        do use (widgetState . #topLine) >>= selectByLine . MkLineNumber 
-        do \(ln, l) -> do
-            B.invalidateCacheEntry (mkName $ LogsViewWidgetLogEntry ln l.idx)
-            deselect
-  
+    's' -> use (widgetState . #topLine) >>= handleSelect . MkLineNumber
 
     _ -> pure ()
   V.KEnter ->
@@ -173,10 +168,20 @@ handleKeyboardEvent key _ = case key of
       do ?callbacks.selectedLog . Just . snd
   _ -> pure ()
   where 
-    deselect = do
-      widgetState . #selectedLog .= Nothing
-      ?callbacks.selectedLog Nothing 
+
+handleSelect :: Ctx s => LineNumber -> B.EventM Name s ()
+handleSelect line =  use (widgetState . #selectedLog) >>= maybe 
+        do selectByLine line 
+        do \(ln, l) -> do
+            B.invalidateCacheEntry (mkName $ LogsViewWidgetLogEntry ln l.idx)
+            deselect
   
+deselect :: Ctx s => B.EventM Name s ()
+deselect = do
+  widgetState . #selectedLog .= Nothing
+  ?callbacks.selectedLog Nothing 
+
+
 move :: Ctx s => Int -> B.EventM Name s ()
 move diff = use (widgetState . #selectedLog) >>= maybe 
   do goTo (Relative diff)
