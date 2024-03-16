@@ -1,4 +1,5 @@
 {-# LANGUAGE DerivingStrategies #-}
+
 module Type.Name where
 
 import Type.Field (Field)
@@ -37,7 +38,7 @@ data FieldsWidgetName
   | FieldWidgetViewport
   deriving (Eq, Ord, Show)
 
-newtype LineNumber = MkLineNumber { rawLineNumber :: Int }
+newtype LineNumber = MkLineNumber {rawLineNumber :: Int}
   deriving newtype (Eq, Ord, Show)
 
 data LogsViewWidgetName

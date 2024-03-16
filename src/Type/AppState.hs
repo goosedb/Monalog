@@ -57,7 +57,7 @@ initialState = do
             , topLine = initialTopLine
             , activeLogs = All
             , filterQueue = Nothing
-            , filterWorker = Nothing
+            , killFilterWorker = pure ()
             , followLogs = initialFollowLogs
             }
       , logView = Nothing

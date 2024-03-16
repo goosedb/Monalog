@@ -29,11 +29,9 @@ statusBarWidgetHandleEvent widgetState StatusBarWidgetCallbacks{..} = \case
       StatusBarWidgetGoToTop -> do
         goToTop
         widgetState . #followLogs .= False
-        changeFollowLogs False
       StatusBarWidgetGoToBottom -> do
         goToBottom
         widgetState . #followLogs .= False
-        changeFollowLogs False
       StatusBarWidgetEditor -> widgetState . #isEditorActive .= True
       StatusBarWidgetFollow -> do
         widgetState . #followLogs %= not

@@ -5,7 +5,7 @@ import Brick.BChan qualified as B
 import Conduit (MonadIO (..))
 import Control.Exception (throwIO)
 import Control.Lens
-import Control.Monad (when, forM_)
+import Control.Monad (forM_, when)
 import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
 import Graphics.Vty qualified as V
@@ -27,7 +27,7 @@ import Widgets.Query.Handler qualified as Query
 import Widgets.Query.Types qualified as Query
 import Widgets.StatusBar.Handler qualified as StatusBar
 import Widgets.StatusBar.Types qualified as StatusBar
-import Widgets.Types (PackedLens'(PackedLens'))
+import Widgets.Types (PackedLens' (PackedLens'))
 
 handleEvent :: B.BChan Event -> B.BrickEvent Name Event -> B.EventM Name AppState ()
 handleEvent ch e = do
@@ -40,10 +40,10 @@ handleEvent ch e = do
       FatalError txt -> do
         B.halt
         liftIO $ throwIO txt
-      NewLog ls -> forM_ ls \l -> do
+      NewLogs ls -> forM_ ls \l -> do
         callFieldsWidget (Fields.NewLog l)
         callLogsViewWidget (LogsView.NewLog l)
-      FilteredLog l -> do
+      FilteredLogs ls -> forM_ ls \l -> do
         callLogsViewWidget (LogsView.FilteredLog l)
       _ -> pure ()
     B.MouseDown (WidgetName name) V.BLeft _ loc | ms == Up -> do
@@ -149,8 +149,9 @@ handleEvent ch e = do
     do #fieldsView
     do fieldsWidgetCallbacks
 
-  callLogsViewWidget = 
-    let ?callbacks = LogsView.LogsViewWidgetCallbacks
+  callLogsViewWidget =
+    let ?callbacks =
+          LogsView.LogsViewWidgetCallbacks
             { topLineChanged = callStatusBarWidget . StatusBar.ChangeTopLine
             , totalLinesChanged = callStatusBarWidget . StatusBar.ChangeTotalLines
             , selectedLogChanged = \_ -> pure ()
@@ -162,8 +163,7 @@ handleEvent ch e = do
             , resetFollow = callStatusBarWidget StatusBar.ResetFollow
             }
         ?widgetState = PackedLens' #logsView
-    in LogsView.logsViewWidgetHandleEvent
-
+     in LogsView.logsViewWidgetHandleEvent
 
   callErrorWidget = Error.errorWidgetHandleEvent
     do errorWidgetCallbacks

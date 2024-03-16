@@ -9,6 +9,7 @@ library
   -- cabal-fmt: expand src
   exposed-modules:
     App
+    Buffer
     Handler
     Path
     Query
@@ -83,7 +84,6 @@ library
     , vector
     , vty
     , vty-crossplatform
-    , word-wrap
     , yaml
 
   if os(windows)

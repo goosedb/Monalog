@@ -2,7 +2,6 @@ module Widgets.LogsView.Types where
 
 import Brick qualified as B
 import Brick.BChan qualified as B
-import Control.Concurrent (ThreadId)
 import Control.Concurrent.STM (TQueue)
 import Data.Generics.Labels ()
 import GHC.Generics (Generic)
@@ -31,7 +30,7 @@ data LogsViewWidget = LogsViewWidget
   , topLine :: Int
   , activeLogs :: ActiveLogs
   , filterQueue :: Maybe (TQueue Log)
-  , filterWorker :: Maybe ThreadId
+  , killFilterWorker :: IO ()
   , followLogs :: Bool
   }
   deriving (Generic)

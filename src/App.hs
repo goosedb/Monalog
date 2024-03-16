@@ -6,10 +6,11 @@ import Brick qualified as B
 import Brick.BChan (newBChan, writeBChan)
 import Brick.BChan qualified as B
 import Brick.Widgets.Skylighting qualified as B
+import Buffer (Buffer (..), makeBuffer)
 import Conduit (MonadIO (..))
 import Control.Concurrent (forkIO)
 import Control.Exception (finally)
-import Control.Monad (void, forever)
+import Control.Monad (void)
 import Data.Conduit qualified as C
 import Data.Conduit.Combinators qualified as C
 import Data.Generics.Labels ()
@@ -19,7 +20,6 @@ import Effectful qualified as Eff
 import Effectful.Resource qualified as Eff
 import Effectful.State.Static.Local qualified as Eff
 import GHC.IO (catchException)
-import GHC.Conc.IO (threadDelay)
 import Graphics.Vty qualified as V
 import Handler (handleEvent)
 import Skylighting qualified as S
@@ -31,7 +31,6 @@ import Type.AppState
 import Type.Event
 import Type.Name
 import Ui (drawUi)
-import Data.IORef
 import Vty (withVty)
 
 data Input = Stdin | File FilePath
@@ -60,18 +59,13 @@ app AppArguments{..} = withVty \vty -> do
               . Eff.evalState (1 :: Int)
               . C.runConduit
 
-      buffer <- newIORef []
-      
-      void $ forkIO $ forever do 
-        ls <- atomicModifyIORef buffer (\ls -> ([], ls))
-        liftIO . writeBChan ch . NewLog $ (reverse ls) 
-        threadDelay 250000
+      Buffer{..} <- makeBuffer (writeBChan ch . NewLogs)
 
       void
         . forkIO
         . runConduit
         $ logsStream
-          C..| C.mapM (\l -> liftIO $ atomicModifyIORef buffer (\ls -> (l:ls, ())))
+          C..| C.mapM (liftIO . pushBuffer)
           C..| C.sinkNull
 
       freshState <- initialState
@@ -84,7 +78,9 @@ app AppArguments{..} = withVty \vty -> do
                 do Just ch
                 do brickApp ch
                 do freshState
-            do V.shutdown vty
+            do
+              V.shutdown vty
+              killBuffer
 
       run `catchException` \case MkFatalError e -> Text.IO.putStrLn e
 

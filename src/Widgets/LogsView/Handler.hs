@@ -2,6 +2,7 @@ module Widgets.LogsView.Handler where
 
 import Brick qualified as B
 import Brick.BChan qualified as B
+import Buffer (Buffer (..), makeBuffer)
 import Control.Concurrent (forkIO, killThread)
 import Control.Concurrent.STM (atomically, newTQueueIO, readTQueue, writeTQueue)
 import Control.Lens
@@ -9,6 +10,7 @@ import Control.Monad (forM_, forever, void, when)
 import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (Value (..))
 import Data.Bool (bool)
+import Data.Foldable (traverse_)
 import Data.Generics.Labels ()
 import Data.Maybe (fromJust)
 import Data.Vector qualified as Vec
@@ -31,7 +33,7 @@ logsViewWidgetHandleEvent e = do
     AltScroll (signum -> int) -> scrollHorizontally int
     Key key mods -> handleKeyboardEvent key mods
     Click (LogsViewWidgetFieldMove dir) -> handleMoveClick dir
-    Click (LogsViewWidgetLogEntry lineNumber _) -> handleSelect lineNumber
+    Click (LogsViewWidgetLogEntry lineNumber _) -> handleMouseSelect lineNumber
     NewLog l -> do
       B.zoom widgetState do
         B.zoom #allLogs (addLog l)
@@ -48,16 +50,16 @@ logsViewWidgetHandleEvent e = do
         _ -> pure ()
     RunFilter ch q -> runFilter ch q
     ClearFilter -> clearFilter
-    GoToTop -> goTo Top
-    GoToBottom -> goTo Bottom
+    GoToTop -> goToTop
+    GoToBottom -> goToBottom
     GoTo n -> goTo (Line n)
     FollowLogs follow -> do
       widgetState . #followLogs .= follow
-      goTo Bottom
+      goToBottom
     _ -> pure ()
  where
   addLogsToView = do
-    thereIsSpaceForLogInView <- B.zoom widgetState do 
+    thereIsSpaceForLogInView <- B.zoom widgetState do
       getThereIsSpaceForLogInView
 
     use (widgetState . #followLogs) >>= bool
@@ -83,9 +85,9 @@ logsViewWidgetHandleEvent e = do
     B.invalidateCache
 
 scrollHorizontally :: Int -> B.EventM Name s ()
-scrollHorizontally i = 
+scrollHorizontally i =
   let vpName = mkName LogsViewWidgetViewport
-  in B.hScrollBy (B.viewportScroll vpName) i
+   in B.hScrollBy (B.viewportScroll vpName) i
 
 addLog :: Log -> B.EventM Name (Logs Mutable) ()
 addLog l = do
@@ -112,8 +114,10 @@ runFilter ch query = do
 
     allLogs <- use #allLogs
 
+    Buffer{..} <- liftIO $ makeBuffer (B.writeBChan ch . E.FilteredLogs)
+
     let filterAndSend l = when (filterLog l) do
-          B.writeBChan ch (E.FilteredLog l)
+          pushBuffer l
 
     workerId <- liftIO $ forkIO do
       forM_ [0 .. allLogs.len - 1] \i -> do
@@ -121,7 +125,7 @@ runFilter ch query = do
       forever do
         atomically (readTQueue filterQueue) >>= filterAndSend
 
-    #filterWorker .= Just workerId
+    #killFilterWorker .= (killThread workerId >> killBuffer)
 
   B.invalidateCache
  where
@@ -130,13 +134,13 @@ runFilter ch query = do
     ValueResult (Bool b) -> b
     _ -> False
 
-clearFilter :: Ctx s => B.EventM Name s ()
+clearFilter :: (Ctx s) => B.EventM Name s ()
 clearFilter = do
   changeTopLine minimalTopLine
-  B.zoom widgetState do 
+  B.zoom widgetState do
     #filterQueue .= Nothing
-    use #filterWorker >>= maybe (pure ()) (liftIO . killThread)
-    #filterWorker .= Nothing
+    use #killFilterWorker >>= liftIO
+    #killFilterWorker .= pure ()
     #activeLogs .= All
     updateVisibleLogs
 
@@ -147,12 +151,8 @@ data GoTo = Line Int | Bottom | Top | Relative Int
 handleKeyboardEvent :: (Ctx s) => V.Key -> [V.Modifier] -> B.EventM Name s ()
 handleKeyboardEvent key _ = case key of
   V.KChar ch -> case ch of
-    't' -> goTo Top
-      >> B.invalidateCache 
-      >> deselect
-    'b' -> goTo Bottom 
-      >> B.invalidateCache 
-      >> deselect
+    't' -> goToTop
+    'b' -> goToBottom
     'h' -> scrollHorizontally (-shortScroll)
     'l' -> scrollHorizontally shortScroll
     'H' -> scrollHorizontally (-longHScroll)
@@ -161,51 +161,76 @@ handleKeyboardEvent key _ = case key of
     'J' -> move (-longVScroll)
     'k' -> move shortScroll
     'K' -> move longVScroll
-    's' -> use (widgetState . #topLine) >>= handleSelect . MkLineNumber
-
+    's' -> use (widgetState . #topLine) >>= handleKeyboardSelect . MkLineNumber
     _ -> pure ()
   V.KEnter ->
     use (widgetState . #selectedLog) >>= maybe
       do pure ()
       do ?callbacks.selectedLog . Just . snd
   _ -> pure ()
-  where 
+ where
 
-handleSelect :: Ctx s => LineNumber -> B.EventM Name s ()
-handleSelect line =  use (widgetState . #selectedLog) >>= maybe 
-        do selectByLine line 
-        do \(ln, l) -> do
-            B.invalidateCacheEntry (mkName $ LogsViewWidgetLogEntry ln l.idx)
-            deselect
-  
-deselect :: Ctx s => B.EventM Name s ()
+goToTop :: (Ctx s) => B.EventM Name s ()
+goToTop =
+  goTo Top
+    >> B.invalidateCache
+    >> deselect
+
+goToBottom :: (Ctx s) => B.EventM Name s ()
+goToBottom =
+  goTo Bottom
+    >> B.invalidateCache
+    >> deselect
+
+handleKeyboardSelect :: (Ctx s) => LineNumber -> B.EventM Name s ()
+handleKeyboardSelect line =
+  use (widgetState . #selectedLog) >>= maybe
+    do selectByLine line
+    do \(ln, l) -> deselectLog ln l
+
+handleMouseSelect :: (Ctx s) => LineNumber -> B.EventM Name s ()
+handleMouseSelect line = do
+  alreadySelected <- use (widgetState . #selectedLog)
+  selecting <- B.zoom widgetState (getLineLog line)
+  if ((.idx) . snd <$> alreadySelected) == ((.idx) <$> selecting)
+    then traverse_ (uncurry deselectLog) alreadySelected
+    else traverse_ (select line) selecting
+
+deselectLog :: (Ctx s) => LineNumber -> Log -> B.EventM Name s ()
+deselectLog ln l = do
+  B.invalidateCacheEntry (mkName $ LogsViewWidgetLogEntry ln l.idx)
+  widgetState . #selectedLog .= Nothing
+  ?callbacks.selectedLog Nothing
+
+deselect :: (Ctx s) => B.EventM Name s ()
 deselect = do
   widgetState . #selectedLog .= Nothing
-  ?callbacks.selectedLog Nothing 
+  ?callbacks.selectedLog Nothing
 
-
-move :: Ctx s => Int -> B.EventM Name s ()
-move diff = use (widgetState . #selectedLog) >>= maybe 
-  do goTo (Relative diff)
-  do \(MkLineNumber lineNumber, _) -> do 
-      topLine <- use $ widgetState . #topLine
-      logsViewHeight <- getLogsViewHeight
-      logs <- B.zoom widgetState getActiveLogs
-      let middle = topLine + (logsViewHeight `div` 2)
-      let newLineNumber = min logs.len $ max minimalTopLine $ lineNumber + diff
-      selectByLine (MkLineNumber newLineNumber)
-      if | newLineNumber <= topLine -> goTo (Relative (newLineNumber - topLine))
+move :: (Ctx s) => Int -> B.EventM Name s ()
+move diff =
+  use (widgetState . #selectedLog) >>= maybe
+    do goTo (Relative diff)
+    do
+      \(MkLineNumber lineNumber, _) -> do
+        topLine <- use $ widgetState . #topLine
+        logsViewHeight <- getLogsViewHeight
+        logs <- B.zoom widgetState getActiveLogs
+        let middle = topLine + (logsViewHeight `div` 2)
+        let newLineNumber = min logs.len $ max minimalTopLine $ lineNumber + diff
+        selectByLine (MkLineNumber newLineNumber)
+        if
+          | newLineNumber <= topLine -> goTo (Relative (newLineNumber - topLine))
           | topLine + logsViewHeight <= logs.len + 1 -> when (newLineNumber > middle) do
-            goTo (Relative (newLineNumber - middle)) 
+              goTo (Relative (newLineNumber - middle))
           | otherwise -> pure ()
 
 selectByLine :: (Ctx s) => LineNumber -> B.EventM Name s ()
 selectByLine line = do
   B.zoom widgetState (getLineLog line) >>= maybe (pure ()) (select line)
 
-
 getLogById :: (Ctx s) => Idx -> B.EventM Name s Log
-getLogById idx = use (widgetState . #allLogs . #logs) >>= liftIO . ($ idx.rawIdx - 1) . MVec.read 
+getLogById idx = use (widgetState . #allLogs . #logs) >>= liftIO . ($ idx.rawIdx - 1) . MVec.read
 
 select :: (Ctx s) => LineNumber -> Log -> B.EventM Name s ()
 select lineNumber selectingLog = do
@@ -213,7 +238,7 @@ select lineNumber selectingLog = do
   B.invalidateCacheEntry (mkName $ LogsViewWidgetLogEntry lineNumber selectingLog.idx)
 
   use (widgetState . #selectedLog) >>= maybe (pure ()) \(ln, l) -> do
-      B.invalidateCacheEntry (mkName $ LogsViewWidgetLogEntry ln l.idx)
+    B.invalidateCacheEntry (mkName $ LogsViewWidgetLogEntry ln l.idx)
 
   ?callbacks.selectedLog (Just selectingLog)
 
@@ -240,10 +265,8 @@ goTo gt = do
       when (topLine + logsViewHeight <= logs.len) do
         changeTopLine $ (logs.len - logsViewHeight + 1) + if logs.len > 0 then 1 else 0
         B.zoom widgetState updateVisibleLogs
-
     Line line -> goToLine line
     Relative diff -> goToLine (topLine + diff)
-
 
 updateVisibleLogs :: B.EventM Name LogsViewWidget ()
 updateVisibleLogs = do
@@ -281,7 +304,6 @@ longVScroll = 10
 longHScroll :: Int
 longHScroll = 3
 
-
 shortScroll :: Int
 shortScroll = 1
 
@@ -293,8 +315,7 @@ resetFollowLogs = do
 ifFalse :: (Applicative f) => f a -> Bool -> f ()
 ifFalse action = bool (void action) (pure ())
 
-
-changeTopLine :: Ctx s => Int -> B.EventM Name s ()
+changeTopLine :: (Ctx s) => Int -> B.EventM Name s ()
 changeTopLine i = do
   widgetState . #topLine .= i
   ?callbacks.topLineChanged i

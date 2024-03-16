@@ -6,7 +6,7 @@ import Control.Exception (Exception)
 import Data.Text (Text)
 import Type.Log (Log)
 
-data Event = NewLog [Log] | FilteredLog Log | SearchEnded | Tick | FatalError FatalError
+data Event = NewLogs [Log] | FilteredLogs [Log] | SearchEnded | Tick | FatalError FatalError
 
 newtype FatalError = MkFatalError Text
   deriving (Show)
