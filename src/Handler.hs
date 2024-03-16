@@ -5,7 +5,7 @@ import Brick.BChan qualified as B
 import Conduit (MonadIO (..))
 import Control.Exception (throwIO)
 import Control.Lens
-import Control.Monad (when)
+import Control.Monad (when, forM_)
 import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
 import Graphics.Vty qualified as V
@@ -32,6 +32,7 @@ import Widgets.Types (PackedLens'(PackedLens'))
 handleEvent :: B.BChan Event -> B.BrickEvent Name Event -> B.EventM Name AppState ()
 handleEvent ch e = do
   ms <- use #mouseState
+
   activeWidget <- use #activeWidget
   logView <- use #logView
   case e of
@@ -39,7 +40,7 @@ handleEvent ch e = do
       FatalError txt -> do
         B.halt
         liftIO $ throwIO txt
-      NewLog l -> do
+      NewLog ls -> forM_ ls \l -> do
         callFieldsWidget (Fields.NewLog l)
         callLogsViewWidget (LogsView.NewLog l)
       FilteredLog l -> do

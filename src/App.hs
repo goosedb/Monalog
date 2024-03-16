@@ -9,7 +9,7 @@ import Brick.Widgets.Skylighting qualified as B
 import Conduit (MonadIO (..))
 import Control.Concurrent (forkIO)
 import Control.Exception (finally)
-import Control.Monad (void)
+import Control.Monad (void, forever)
 import Data.Conduit qualified as C
 import Data.Conduit.Combinators qualified as C
 import Data.Generics.Labels ()
@@ -19,6 +19,7 @@ import Effectful qualified as Eff
 import Effectful.Resource qualified as Eff
 import Effectful.State.Static.Local qualified as Eff
 import GHC.IO (catchException)
+import GHC.Conc.IO (threadDelay)
 import Graphics.Vty qualified as V
 import Handler (handleEvent)
 import Skylighting qualified as S
@@ -30,6 +31,7 @@ import Type.AppState
 import Type.Event
 import Type.Name
 import Ui (drawUi)
+import Data.IORef
 import Vty (withVty)
 
 data Input = Stdin | File FilePath
@@ -57,11 +59,19 @@ app AppArguments{..} = withVty \vty -> do
               . Eff.runResource
               . Eff.evalState (1 :: Int)
               . C.runConduit
+
+      buffer <- newIORef []
+      
+      void $ forkIO $ forever do 
+        ls <- atomicModifyIORef buffer (\ls -> ([], ls))
+        liftIO . writeBChan ch . NewLog $ (reverse ls) 
+        threadDelay 250000
+
       void
         . forkIO
         . runConduit
         $ logsStream
-          C..| C.mapM (liftIO . writeBChan ch . NewLog)
+          C..| C.mapM (\l -> liftIO $ atomicModifyIORef buffer (\ls -> (l:ls, ())))
           C..| C.sinkNull
 
       freshState <- initialState

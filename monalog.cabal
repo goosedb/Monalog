@@ -50,6 +50,7 @@ library
     Widgets.StatusBar.Handler
     Widgets.StatusBar.Types
     Widgets.StatusBar.Ui
+    Widgets.Types
 
   build-depends:
     , aeson
@@ -62,11 +63,11 @@ library
     , conduit
     , containers
     , effectful
+    , filepath
     , fuzzy
     , generic-lens
     , lens
     , lens-aeson
-    , filepath
     , megaparsec
     , mtl
     , parser-combinators

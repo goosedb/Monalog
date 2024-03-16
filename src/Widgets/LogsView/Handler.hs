@@ -155,10 +155,12 @@ handleKeyboardEvent key _ = case key of
       >> deselect
     'h' -> scrollHorizontally (-shortScroll)
     'l' -> scrollHorizontally shortScroll
+    'H' -> scrollHorizontally (-longHScroll)
+    'L' -> scrollHorizontally longHScroll
     'j' -> move (-shortScroll)
-    'J' -> move (-longScroll)
+    'J' -> move (-longVScroll)
     'k' -> move shortScroll
-    'K' -> move longScroll
+    'K' -> move longVScroll
     's' -> use (widgetState . #topLine) >>= handleSelect . MkLineNumber
 
     _ -> pure ()
@@ -273,8 +275,12 @@ getLineLog line = do
     _ | logs.len == 0 -> Nothing
     MkLineNumber (pred . max minimalTopLine . min logs.len -> n) -> Just n
 
-longScroll :: Int
-longScroll = 10
+longVScroll :: Int
+longVScroll = 10
+
+longHScroll :: Int
+longHScroll = 3
+
 
 shortScroll :: Int
 shortScroll = 1
