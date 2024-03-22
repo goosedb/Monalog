@@ -35,8 +35,7 @@ logsViewWidgetDraw availableSpace LogsViewWidget{..} = B.clickable (mkName LogsV
       , B.reportExtent (mkName LogsViewWidgetLogs) $
           B.vBox
             [ let logsList = F.toList visibleLogs.logs
-               in B.vBox $
-                    zip [topLine ..] logsList <&> logRow
+               in B.vBox $ zip [topLine ..] logsList <&> logRow
             , filler
             ]
       ]
@@ -44,8 +43,9 @@ logsViewWidgetDraw availableSpace LogsViewWidget{..} = B.clickable (mkName LogsV
   withHorizontalScroll =
     if needViewport
       then
-        B.withHScrollBarRenderer
-          HScroll.renderer
+        B.withClickableHScrollBars (\e _ -> mkName (LogsViewWidgetHScrollBar e))
+          . B.withHScrollBarRenderer
+            HScroll.renderer
           . B.withHScrollBars B.OnBottom
           . B.viewport (mkName LogsViewWidgetViewport) B.Horizontal
           . B.hLimit totalWidth
@@ -88,7 +88,9 @@ logsViewWidgetDraw availableSpace LogsViewWidget{..} = B.clickable (mkName LogsV
       (mkName LogsViewWidgetFiller)
       let
         numColumn = B.hLimit logNumberWidth (B.fill ' ')
-        otherColumns = map (\FieldWidth{width} -> B.hLimit width (B.fill ' ')) widths
+        otherColumns = case widths of
+          [] -> [B.fill ' ']
+          ws -> map (\FieldWidth{width} -> B.hLimit width (B.fill ' ')) ws
         row = B.hBox $ intersperse B.vBorder (numColumn : otherColumns)
        in
         B.vBox $ map (const row) [1 .. availableSpace.height]

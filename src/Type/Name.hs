@@ -2,6 +2,8 @@
 
 module Type.Name where
 
+import Brick.Types qualified as B
+import Data.Text (Text)
 import Type.Field (Field)
 import Type.Log (Idx)
 
@@ -15,7 +17,7 @@ data WidgetName
   | LogsViewWidgetName LogsViewWidgetName
   | LogViewWidgetName LogViewWidgetName
   | StatusBarWidgetName StatusBarWidgetName
-  | ErrorWidgetName ErrorWidgetName
+  | DialogWidgetName DialogWidgetName
   deriving (Eq, Ord, Show)
 
 data StatusBarWidgetName
@@ -30,12 +32,16 @@ data QueryWidgetName
   = QueryWidgetItself
   | QueryWidgetEditor
   | QueryWidgetErrorHint
+  | QueryWidgetErrorClear
   deriving (Eq, Ord, Show)
 
 data FieldsWidgetName
   = FieldWidgetItself
   | FieldWidgetField Field
+  | FieldWidgetLayoutButton
   | FieldWidgetViewport
+  | FieldWidgetBorder
+  | FieldWidgetHScrollBar B.ClickableScrollbarElement
   deriving (Eq, Ord, Show)
 
 newtype LineNumber = MkLineNumber {rawLineNumber :: Int}
@@ -50,14 +56,19 @@ data LogsViewWidgetName
   | LogsViewWidgetFiller
   | LogsViewWidgetViewport
   | LogsViewWidgetLogs
+  | LogsViewWidgetHScrollBar B.ClickableScrollbarElement
   deriving (Eq, Ord, Show)
 
-data ErrorWidgetName
-  = ErrorWidgetOk
-  | ErrorWidgetItself
+data DialogWidgetName
+  = DialogWidgetItself
+  | DialogButton Text
   deriving (Eq, Ord, Show)
 
 data LogViewWidgetName
   = LogViewWidgetViewport
+  | LogViewWidgetCopyLog
+  | LogViewWidgetJsonpathEditor
+  | LogViewWidgetJsonpathCheckbox
   | LogViewWidgetItself
+  | LogViewWidgetBorder
   deriving (Eq, Ord, Show)

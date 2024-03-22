@@ -3,13 +3,17 @@ module Widgets.LogsView.Handler where
 import Brick qualified as B
 import Brick.BChan qualified as B
 import Buffer (Buffer (..), makeBuffer)
+import Consts (initialTopLine)
 import Control.Concurrent (forkIO, killThread)
 import Control.Concurrent.STM (atomically, newTQueueIO, readTQueue, writeTQueue)
 import Control.Lens
 import Control.Monad (forM_, forever, void, when)
 import Control.Monad.IO.Class (liftIO)
+import Copy.Osc52 qualified as Osc52
 import Data.Aeson (Value (..))
+import Data.Aeson qualified as J
 import Data.Bool (bool)
+import Data.ByteString.Lazy qualified as Bytes.Lazy
 import Data.Foldable (traverse_)
 import Data.Generics.Labels ()
 import Data.Maybe (fromJust)
@@ -22,6 +26,7 @@ import Type.Event qualified as E
 import Type.Log as Logs
 import Type.Name
 import Widgets.LogsView.Types
+import Widgets.Scrollbar.Horizontal qualified as HScroll
 import Widgets.Types
 
 type Ctx s = (WithWidgetContext s LogsViewWidgetCallbacks LogsViewWidget)
@@ -34,28 +39,43 @@ logsViewWidgetHandleEvent e = do
     Key key mods -> handleKeyboardEvent key mods
     Click (LogsViewWidgetFieldMove dir) -> handleMoveClick dir
     Click (LogsViewWidgetLogEntry lineNumber _) -> handleMouseSelect lineNumber
+    Move (LogsViewWidgetHScrollBar _) prevLoc newLoc -> do
+      HScroll.handleScroll prevLoc newLoc (mkName LogsViewWidgetViewport)
+      B.invalidateCache
     NewLog l -> do
       B.zoom widgetState do
         B.zoom #allLogs (addLog l)
         use #filterQueue >>= maybe (pure ()) (liftIO . atomically . flip writeTQueue l)
 
       use (widgetState . #activeLogs) >>= \case
-        All -> addLogsToView
+        All -> do
+          addLogsToView
+          B.zoom widgetState getActiveLogs >>= ?callbacks.totalLinesChanged . (.len)
         _ -> pure ()
     FilteredLog l -> do
       B.zoom (widgetState . #filteredLogs) (addLog l)
 
       use (widgetState . #activeLogs) >>= \case
-        Filtered -> addLogsToView
+        Filtered -> do
+          addLogsToView
+          B.zoom widgetState getActiveLogs >>= ?callbacks.totalLinesChanged . (.len)
         _ -> pure ()
     RunFilter ch q -> runFilter ch q
     ClearFilter -> clearFilter
     GoToTop -> goToTop
     GoToBottom -> goToBottom
-    GoTo n -> goTo (Line n)
+    GoTo n -> do
+      goTo (Line n)
+      use (widgetState . #topLine) >>= selectByLine . MkLineNumber
     FollowLogs follow -> do
       widgetState . #followLogs .= follow
       goToBottom
+    CleanupLogs -> do
+      defaultSelectedFields <- use $ widgetState . #defaultSelectedFields
+      widgetState . #selectedFields .= defaultSelectedFields
+      ?callbacks.topLineChanged initialTopLine
+      ?callbacks.totalLinesChanged 0
+      B.invalidateCache
     _ -> pure ()
  where
   addLogsToView = do
@@ -66,7 +86,9 @@ logsViewWidgetHandleEvent e = do
       do
         when thereIsSpaceForLogInView do
           B.zoom widgetState updateVisibleLogs
-      do goTo Bottom
+      do
+        goTo Bottom
+        B.zoom widgetState updateVisibleLogs
 
     ?callbacks.logAddedToView
 
@@ -149,26 +171,31 @@ clearFilter = do
 data GoTo = Line Int | Bottom | Top | Relative Int
 
 handleKeyboardEvent :: (Ctx s) => V.Key -> [V.Modifier] -> B.EventM Name s ()
-handleKeyboardEvent key _ = case key of
-  V.KChar ch -> case ch of
-    't' -> goToTop
-    'b' -> goToBottom
-    'h' -> scrollHorizontally (-shortScroll)
-    'l' -> scrollHorizontally shortScroll
-    'H' -> scrollHorizontally (-longHScroll)
-    'L' -> scrollHorizontally longHScroll
-    'j' -> move (-shortScroll)
-    'J' -> move (-longVScroll)
-    'k' -> move shortScroll
-    'K' -> move longVScroll
-    's' -> use (widgetState . #topLine) >>= handleKeyboardSelect . MkLineNumber
+handleKeyboardEvent key mods = do
+  case key of
+    _ | key == V.KChar 'H' || shifted V.KLeft -> do
+      scrollHorizontally (-longHScroll)
+    _
+      | key == V.KChar 'L' || shifted V.KRight ->
+          scrollHorizontally longHScroll
+    _ | key == V.KChar 'K' || shifted V.KDown -> move longVScroll
+    _ | key == V.KChar 'J' || shifted V.KUp -> move (-longVScroll)
+    V.KChar 't' -> goToTop
+    V.KChar 'b' -> goToBottom
+    _ | key `elem` [V.KChar 'h', V.KLeft] -> scrollHorizontally (-shortScroll)
+    _ | key `elem` [V.KChar 'l', V.KRight] -> scrollHorizontally shortScroll
+    _ | key `elem` [V.KChar 'j', V.KUp] -> move (-shortScroll)
+    _ | key `elem` [V.KChar 'k', V.KDown] -> move shortScroll
+    V.KChar 's' -> use (widgetState . #topLine) >>= handleKeyboardSelect . MkLineNumber
+    V.KChar 'g' -> ?callbacks.goToRequest
+    V.KChar _ -> pure ()
+    V.KEnter ->
+      use (widgetState . #selectedLog) >>= maybe
+        do pure ()
+        do ?callbacks.selectedLog . Just . snd
     _ -> pure ()
-  V.KEnter ->
-    use (widgetState . #selectedLog) >>= maybe
-      do pure ()
-      do ?callbacks.selectedLog . Just . snd
-  _ -> pure ()
  where
+  shifted b = key == b && mods == [V.MShift]
 
 goToTop :: (Ctx s) => B.EventM Name s ()
 goToTop =
@@ -186,12 +213,13 @@ handleKeyboardSelect :: (Ctx s) => LineNumber -> B.EventM Name s ()
 handleKeyboardSelect line =
   use (widgetState . #selectedLog) >>= maybe
     do selectByLine line
-    do \(ln, l) -> deselectLog ln l
+    do uncurry deselectLog
 
 handleMouseSelect :: (Ctx s) => LineNumber -> B.EventM Name s ()
 handleMouseSelect line = do
   alreadySelected <- use (widgetState . #selectedLog)
   selecting <- B.zoom widgetState (getLineLog line)
+  maybe (pure ()) (Osc52.copy . Bytes.Lazy.toStrict . J.encode . (.value)) selecting
   if ((.idx) . snd <$> alreadySelected) == ((.idx) <$> selecting)
     then traverse_ (uncurry deselectLog) alreadySelected
     else traverse_ (select line) selecting

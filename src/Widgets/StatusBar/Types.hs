@@ -6,6 +6,7 @@ import Data.Generics.Labels ()
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import Graphics.Vty qualified as V
+import Type.LogViewPosition (LogViewPosition)
 import Type.Name
 
 data StatusBarWidget = StatusBarWidget
@@ -15,12 +16,9 @@ data StatusBarWidget = StatusBarWidget
   , isEditorActive :: Bool
   , logViewPosition :: LogViewPosition
   , followLogs :: Bool
+  , copied :: Bool
   }
   deriving (Generic)
-
-data LogViewPosition
-  = LogViewPositionBottom
-  | LogViewPositionRight
 
 data StatusBarWidgetEvent
   = NewLog
@@ -29,6 +27,9 @@ data StatusBarWidgetEvent
   | Click StatusBarWidgetName
   | Key V.Key [V.Modifier]
   | ResetFollow
+  | SetCopied
+  | ResetCopied
+  | ActivateEditor
 
 data StatusBarWidgetCallbacks s = StatusBarWidgetCallbacks
   { goToTop :: B.EventM Name s ()

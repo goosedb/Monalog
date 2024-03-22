@@ -1,32 +1,36 @@
 module Type.AppState where
 
+import Brick qualified as B
 import Brick.Widgets.Edit qualified as B
+import Consts
 import Data.Map.Strict qualified as Map
 import Data.String (IsString (..))
-import Data.Vector.Mutable qualified as MVec
 import GHC.Generics
 import Type.Field (Field (..))
-import Type.Log (Logs (ImmutableLogs, MutableLogs))
+import Type.LogViewPosition (LogViewPosition (..))
 import Type.MaxWidth (MaxWidth (MaxWidth))
 import Type.Name qualified as N
-import Widgets.Error.Types (ErrorWidget)
+import Type.WidgetSize (WidgetSize (..))
+import Widgets.Dialog.Types (DialogWidget)
+import Widgets.Editor (emptyEditor)
 import Widgets.Fields.Types
-import Widgets.LogView.Types (LogViewWidget)
+import Widgets.LogView.Types (LogViewWidget, emptyLogWidget)
 import Widgets.LogsView.Types
 import Widgets.Query.Types
-import Widgets.StatusBar.Types (LogViewPosition (..), StatusBarWidget (..))
+import Widgets.StatusBar.Types (StatusBarWidget (..))
 
-data MouseState = Up | Down
+data MouseState = Up | Down N.Name B.Location
   deriving (Eq, Show)
 
 data AppState = AppState
   { logsView :: LogsViewWidget
-  , logView :: Maybe LogViewWidget
+  , logView :: LogViewWidget
   , statusBar :: StatusBarWidget
   , fieldsView :: FieldsWidget
   , queryView :: QueryWidget
   , mouseState :: MouseState
   , activeWidget :: [ActiveWidgetName]
+  , dialogWidget :: Maybe (DialogWidget AppState)
   }
   deriving (Generic)
 
@@ -35,32 +39,20 @@ data ActiveWidgetName
   | LogsWidgetName
   | LogWidgetName
   | FieldWidgetName
-  | ScrollBarWidgetName
-  | ErrorWidgetName ErrorWidget
+  | StatusBarWidgetName
+  | DialogWidgetName
   deriving (Eq)
 
-initialState :: IO AppState
-initialState = do
-  allLogs <- MVec.new 64
-  filteredLogs <- MVec.new 1
-  let initialFollowLogs = True
-  let initialTopLine = 1
+initialState :: Maybe [Field] -> IO AppState
+initialState defaultFields = do
+  let defaultWidth = MaxWidth 1
+  initialLogsView <- initLogsView (maybe [] (map (`SelectedField` defaultWidth)) defaultFields)
+  let fields = maybe initialFields (Map.fromList . map (,FieldState{isSelected = True, maxWidth = defaultWidth})) defaultFields
   pure
     AppState
-      { logsView =
-          LogsViewWidget
-            { allLogs = MutableLogs allLogs 0
-            , filteredLogs = MutableLogs filteredLogs 0
-            , selectedLog = Nothing
-            , selectedFields = []
-            , visibleLogs = ImmutableLogs mempty
-            , topLine = initialTopLine
-            , activeLogs = All
-            , filterQueue = Nothing
-            , killFilterWorker = pure ()
-            , followLogs = initialFollowLogs
-            }
-      , logView = Nothing
+      { dialogWidget = Nothing
+      , logsView = initialLogsView
+      , logView = emptyLogWidget
       , statusBar =
           StatusBarWidget
             { totalLines = 0
@@ -73,18 +65,18 @@ initialState = do
             , topLine = initialTopLine
             , followLogs = initialFollowLogs
             , logViewPosition = LogViewPositionRight
+            , copied = False
             }
       , fieldsView =
           FieldsWidget
-            { fields =
-                Map.fromList
-                  [ (Timestamp, FieldState{isSelected = False, maxWidth = MaxWidth 8})
-                  , (Raw, FieldState{isSelected = False, maxWidth = MaxWidth 5000})
-                  ]
+            { fields = fields
+            , defaultFields = fields
+            , width = Auto
+            , layout = Flatten
             }
       , queryView =
           QueryWidget
-            { input = B.editorText (N.WidgetName $ N.QueryWidgetName N.QueryWidgetEditor) (Just 1) ""
+            { input = emptyEditor (N.WidgetName $ N.QueryWidgetName N.QueryWidgetEditor)
             , parseError = Nothing
             }
       , mouseState = Up

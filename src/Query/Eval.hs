@@ -21,14 +21,18 @@ evalQuery v = go
       (BoolResult l, ValueResult r) -> Bool l == r
       (ValueResult lval, ValueResult rval) -> lval == rval
       (ValueResult l, BoolResult r) -> l == Bool r
-    Zoom path q' -> evalQuery (getByPath path v) q'
     Path path -> ValueResult (getByPath path v)
     Value val -> ValueResult val
     Like l r -> BoolResult case (go l, go r) of
-      (ValueResult (String ls), ValueResult (String lr)) -> Fuzzy.test ls lr
+      (ValueResult (String ls), ValueResult (String lr)) -> Fuzzy.test lr ls
       _ -> False
     In a as -> case (toValue (go a), toArray (go as)) of
       (a', as') -> BoolResult $ elem a' as'
+    Gt ql qr -> BoolResult case (toValue $ go ql, toValue $ go qr) of
+      (Bool l, Bool r) -> l > r
+      (Number l, Number r) -> l > r
+      (String l, String r) -> l > r
+      _ -> False
 
   toValue = \case
     BoolResult a -> Bool a

@@ -20,9 +20,9 @@ withVty action = do
   -- https://github.com/microsoft/terminal/issues/16868
   withFile "\\\\.\\CONIN$" ReadWriteMode \tty -> do
 #else
-  withFile "/dev/tty" ReadMode \ttyHandle -> do
+  withFile "/dev/tty" ReadWriteMode \ttyHandle -> do
     tty <- handleToFd ttyHandle
 #endif
     defSettings <- Vty.defaultSettings
-    vty <- Vty.mkVtyWithSettings Vty.defaultConfig defSettings{Vty.settingInputFd = tty}
+    vty <- Vty.mkVtyWithSettings Vty.defaultConfig defSettings{Vty.settingInputFd = tty, Vty.settingOutputFd = tty}
     action vty

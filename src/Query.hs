@@ -7,9 +7,9 @@ data Query
   | Not Query
   | Or Query Query
   | Eq Query Query
+  | Gt Query Query
   | Like Query Query
   | In Query Query
-  | Zoom [Key] Query
   | Path [Key]
   | Value Value
   deriving (Show)

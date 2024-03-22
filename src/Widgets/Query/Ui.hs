@@ -18,4 +18,6 @@ queryWidgetDraw isActive QueryWidget{..} =
       , case parseError of
           Just _ -> B.clickable (mkName QueryWidgetErrorHint) $ B.txt "[!]"
           Nothing -> B.emptyWidget
+      , B.txt " "
+      , B.clickable (mkName QueryWidgetErrorClear) $ B.txt "[Clear]"
       ]

@@ -2,13 +2,15 @@ module Widgets.Fields.Handler where
 
 import Brick qualified as B
 import Control.Lens
-import Control.Monad (unless)
+import Control.Monad (forM_, unless)
 import Data.Aeson (Value (..), encode)
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Bifunctor (Bifunctor (..))
 import Data.Foldable qualified as F
 import Data.Generics.Labels ()
+import Data.List (isPrefixOf)
 import Data.Map.Strict qualified as Map
+import Data.Maybe (fromJust)
 import Data.Text qualified as Text
 import Data.Text.Lazy qualified as Text.Lazy
 import Data.Text.Lazy.Encoding qualified as Text.Lazy
@@ -16,24 +18,56 @@ import Type.Field
 import Type.Log
 import Type.MaxWidth
 import Type.Name
+import Type.WidgetSize (WidgetSize (..))
 import Widgets.Fields.Types
+import Widgets.Scrollbar.Horizontal qualified as HScroll
 
 fieldsWidgetHandleEvent :: Lens' s FieldsWidget -> FieldsWidgetCallbacks s -> FieldWidgetEvent -> B.EventM Name s ()
 fieldsWidgetHandleEvent widgetState cb@FieldsWidgetCallbacks{..} = \case
   NewLog l -> handleNewLog widgetState cb l
-  Click (FieldWidgetField field) -> do
+  Click (FieldWidgetHScrollBar B.SBBar) loc ->
+    holdMouse (mkName $ FieldWidgetHScrollBar B.SBBar) loc
+  Click FieldWidgetBorder loc@(B.Location (c, _)) -> do
+    B.Extent{extentUpperLeft = B.Location (lc, _)} <- fromJust <$> B.lookupExtent (mkName FieldWidgetItself)
+
+    widgetState . #width .= Manual (c - lc)
+    holdMouse (mkName FieldWidgetBorder) loc
+  Move (FieldWidgetHScrollBar B.SBBar) prevLoc newLoc -> do
+    HScroll.handleScroll prevLoc newLoc (mkName FieldWidgetViewport)
+    B.invalidateCache
+  Move FieldWidgetBorder (B.Location (prevC, _)) (B.Location (newC, _)) -> do
+    widgetState . #width %= \case
+      Manual w -> Manual $ max 10 $ w + (newC - prevC)
+      Auto -> Auto
+    B.invalidateCache
+  Click FieldWidgetLayoutButton _ -> do
+    widgetState . #layout %= \case
+      Flatten -> Nested
+      Nested -> Flatten
+    B.invalidateCache
+  Click (FieldWidgetField field) _ -> do
     fields <- use $ widgetState . #fields
-    let ((isFieldSelected, width), updatedFields) = Map.alterF
-          do
-            maybe ((False, MaxWidth 0), Nothing) \FieldState{..} ->
-              ((not isSelected, maxWidth), Just FieldState{isSelected = not isSelected, ..})
-          do field
+    let isFieldUpdating k = case (field, k) of
+          (Field selectedPath, Field currentPath) -> selectedPath `isPrefixOf` currentPath
+          (a, b) -> a == b
+    let fieldsToUpdate = filter
+          do \(k, _) -> isFieldUpdating k
+          do Map.toList fields
+    let isAnyUpdatingFieldIsActive = any ((.isSelected) . snd) fieldsToUpdate
+    let setToActive = not isAnyUpdatingFieldIsActive
+    let updatedFields = Map.mapWithKey
+          do \k fs@FieldState{..} -> if isFieldUpdating k then FieldState{isSelected = setToActive, ..} else fs
           do fields
-    (if isFieldSelected then fieldSelected width else fieldUnselected) field
-    B.invalidateCacheEntry (mkName FieldWidgetItself)
-    B.invalidateCacheEntry (mkName $ FieldWidgetField field)
+    forM_ fieldsToUpdate \(f, FieldState{..}) ->
+      (if setToActive then fieldSelected maxWidth else fieldUnselected) f
+    B.invalidateCache
     widgetState . #fields .= updatedFields
   Scroll i -> B.vScrollBy (B.viewportScroll (mkName FieldWidgetViewport)) i
+  AltScroll i -> B.hScrollBy (B.viewportScroll (mkName FieldWidgetViewport)) i
+  CleanupFields -> do
+    defaultFields <- use $ widgetState . #defaultFields
+    widgetState . #fields .= defaultFields
+    B.invalidateCache
   _ -> pure ()
 
 handleNewLog :: Lens' s FieldsWidget -> FieldsWidgetCallbacks s -> Log -> B.EventM Name s ()
@@ -54,9 +88,9 @@ handleNewLog widgetState FieldsWidgetCallbacks{..} l = do
              in (if isFieldWidthUpdated then (path, mw) : updFields else updFields, updatedFieldsMap)
         do ([], fields)
         do valueKeys
+  widgetState . #fields .= updatedFields
   unless (null updatedPaths) do
     fieldsChangedMaxSize (Map.fromList updatedPaths)
-  widgetState . #fields .= updatedFields
 
 keys :: Value -> [(Path, MaxWidth)]
 keys (Object o) = concatMap (\(k, v) -> map (first (k :)) $ keys v) (KeyMap.toList o)

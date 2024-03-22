@@ -7,10 +7,13 @@ import Data.Aeson.Key qualified as Key
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Void (Void)
-import GHC.IsList (IsList (..))
+import GHC.Exts (IsList (..))
 import Query (Query (..))
 import Text.Megaparsec
+import Text.Megaparsec qualified as M
 import Text.Megaparsec.Char
+import Text.Megaparsec.Char qualified as M
+import Text.Megaparsec.Char.Lexer qualified as M
 
 type Parser = Parsec Void Text
 
@@ -18,12 +21,6 @@ queryParser :: Parser Query
 queryParser = hspace *> expr <* eof
  where
   expr = makeExprParser term table <* hspace
-  zoomParser = do
-    string @_ @_ @Parser "zoom" >> hspace1
-    path <- pathParser
-    hspace
-    query <- braced expr
-    pure $ Zoom path query
   pathParser = sepBy1 @Parser keyParser "."
 
   braced = between ("(" <* hspace) (")" <* hspace)
@@ -31,7 +28,6 @@ queryParser = hspace *> expr <* eof
   term =
     braced expr
       <|> (Value <$> valueParser <* hspace)
-      <|> zoomParser
       <|> (Path <$> pathParser <* hspace)
 
   table :: [[Operator Parser Query]]
@@ -39,6 +35,11 @@ queryParser = hspace *> expr <* eof
     [ [prefix "not" Not]
     ,
       [ binary "=" Eq
+      , binary "!=" (\a b -> Not (Eq a b))
+      , binary ">=" (\a b -> Gt a b `Or` Eq a b)
+      , binary "<=" (\a b -> Gt b a `Or` Eq a b)
+      , binary ">" Gt
+      , binary "<" (flip Gt)
       , binary "like" Like
       , binary "in" In
       ]
@@ -54,7 +55,8 @@ queryParser = hspace *> expr <* eof
       [ Bool True <$ "true"
       , Bool False <$ "false"
       , Null <$ "null"
-      , String . Text.pack <$> between "\"" "\"" (many (noneOf ['\"']))
+      , String <$> between "\"" "\"" (Text.concat <$> many (M.string "\\\"" <|> (Text.singleton <$> M.noneOf ['\"'])))
+      , Number . fromRational . toRational @Double <$> M.signed (pure ()) (try M.float <|> M.decimal)
       , Array . fromList <$> between
           do "[" >> hspace
           do "]" >> hspace

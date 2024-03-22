@@ -23,7 +23,8 @@ data QueryWidgetCallbacks s = QueryWidgetCallbacks
 
 data QueryWidgetEvent
   = Key V.Key [V.Modifier]
-  | Click QueryWidgetName B.Location
+  | Click QueryWidgetName B.Location B.Location
+  | ActivateEditor
 
 mkName :: QueryWidgetName -> Name
 mkName = WidgetName . QueryWidgetName

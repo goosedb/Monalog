@@ -5,12 +5,11 @@ import Brick.Widgets.Edit qualified as B
 import Control.Lens
 import Data.Generics.Labels ()
 import Data.Text qualified as Text
-import Data.Text.Zipper qualified as Z
-import Data.Text.Zipper.Generic.Words qualified as Z
 import Graphics.Vty qualified as V
 import Query.Parser (queryParser)
 import Text.Megaparsec qualified as M
 import Type.Name
+import Widgets.Editor (emptyEditor, handleEditorEvent)
 import Widgets.Query.Types
 
 queryWidgetHandleEvent ::
@@ -19,28 +18,25 @@ queryWidgetHandleEvent ::
   QueryWidgetEvent ->
   B.EventM Name s ()
 queryWidgetHandleEvent widgetState QueryWidgetCallbacks{..} = \case
-  Key V.KLeft [V.MCtrl] -> moveCursor Z.moveWordLeft
-  Key V.KRight [V.MCtrl] -> moveCursor Z.moveWordRight
-  Key V.KLeft [] -> moveCursor Z.moveLeft
-  Key V.KRight [] -> moveCursor Z.moveRight
-  Key (V.KChar c) ms -> proxyToEditor (B.VtyEvent $ V.EvKey (V.KChar c) ms)
-  Key V.KBS [] -> proxyToEditor (B.VtyEvent $ V.EvKey V.KBS [])
-  Click n@QueryWidgetEditor loc ->
-    let name = WidgetName (QueryWidgetName n)
-     in proxyToEditor (B.MouseDown name V.BLeft [] loc)
-  Click QueryWidgetErrorHint _ -> use (widgetState . #parseError) >>= maybe (pure ()) showError
   Key V.KEnter [] -> tryApplyFilter
+  Key k mods -> invalidatingCacheAction do
+    B.zoom (widgetState . #input) do
+      handleEditorEvent k mods
+    updateQueryState
+  Click n@QueryWidgetEditor loc _ ->
+    let name = WidgetName (QueryWidgetName n)
+     in B.zoom (widgetState . #input) do
+          B.handleEditorEvent (B.MouseDown name V.BLeft [] loc)
+  Click QueryWidgetErrorHint _ _ -> use (widgetState . #parseError) >>= maybe (pure ()) showError
+  Click QueryWidgetErrorClear _ _ -> do
+    widgetState . #input .= emptyEditor (mkName QueryWidgetEditor)
+    updateQueryState
+    clearFilter
   _ -> pure ()
  where
-  moveCursor f = invalidatingCacheAction do
-    B.zoom widgetState do
-      #input . B.editContentsL %= f
-
   invalidatingCacheAction action = B.invalidateCacheEntry queryWidgetName >> action
 
-  proxyToEditor e = invalidatingCacheAction do
-    B.zoom (widgetState . #input) do
-      B.handleEditorEvent e
+  updateQueryState = do
     content <- getEditorContent
     let clearError = widgetState . #parseError .= Nothing
     if Text.null (Text.strip content)
