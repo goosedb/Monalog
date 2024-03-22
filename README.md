@@ -69,7 +69,7 @@ Mouse is fully supported. You can
 | `<=`, `>=`   | Exactly `>` or `=`                                                                                     |
 | `&&`, `\|\|` | Works with `bool`. For operands of other types returns `false`                                         |
 | `not`        | Negates argument                                                                                       |
-| `like`       | Fuzzy text equation                                                                                    |
+| `like`       | Fuzzy text comparison                                                                                    |
 | `in`         | Checks if left operand is element of list in right operand`                                            |
 
 | Literal | Example                    |
