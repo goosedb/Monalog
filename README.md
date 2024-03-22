@@ -91,7 +91,8 @@ Log view supports jsonpath queries. Jsonpath filter can be disabled/enabled with
 Monalog automatically detects fields appear in your logs.
 Fields view supports 2 display mods
   * Flatten
-  * Nested
+  * Nested 
+   
 which can be toggled with button `[Nested]`/`[Flatten]`
 
 ## Input formats
