@@ -47,7 +47,7 @@ run_logging_server | monalog --format=json
 | `j`, `up`            | Shift up            |
 | `J`, `Shift + up`    | Long shift up       |
 | `k`, `down`          | Shift down          |
-| `K`, `Shift + down`  | Long shit down      |
+| `K`, `Shift + down`  | Long shift down      |
 | `s`                  | Select top line log |
 | `scroll`             | Shift up/down       |
 | `Ctrl + scroll`      | Shift left/right    |
