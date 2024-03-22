@@ -80,9 +80,9 @@ Mouse is fully supported. You can
 | array   | `[1, true, "bar"]`         |
 | key     | `_42foo`, `fOooBar`        |
 
-## Coping
-Now only OSC52 coping is implemented. Check out if your terminal supports OSC52  
-Coping is available in log entry view using `[Copy]` button
+## Copying
+Now only OSC52 copying is implemented. Check out if your terminal supports OSC52  
+Copying is available in log entry view using `[Copy]` button
 
 ## Log view
 Log view supports jsonpath queries. Jsonpath filter can be disabled/enabled with checkbox
