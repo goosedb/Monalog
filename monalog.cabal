@@ -12,6 +12,7 @@ library
     Buffer
     Consts
     Copy.Osc52
+    Copy.Native
     Handler
     Path
     Query
@@ -87,6 +88,7 @@ library
     , stm
     , text
     , text-zipper
+    , typed-process
     , time
     , transformers
     , typed-process

@@ -6,6 +6,7 @@ import Brick qualified as B
 import Brick.Widgets.Edit qualified as B
 import Control.Lens
 import Control.Monad.IO.Class (MonadIO (..))
+import Copy.Native qualified as Native
 import Copy.Osc52 qualified as Osc52
 import Data.Aeson (encode)
 import Data.Aeson.Types (Value (..))
@@ -68,6 +69,11 @@ logViewWidgetHandleEvent logViewPosition widgetState callbacks = \case
         else case selectedLog of
           Nothing -> pure ()
           Just Log{..} -> copy value
+    LogViewWidgetCopyMethod -> do
+      widgetState . #copyMethod %= \case
+        Osc52 -> Native
+        Native -> Osc52
+      B.invalidateCacheEntry (mkName LogViewWidgetItself)
     _ -> pure ()
   Key k mods -> do
     B.zoom (widgetState . #jsonPathEditor) do
@@ -78,7 +84,10 @@ logViewWidgetHandleEvent logViewPosition widgetState callbacks = \case
     B.invalidateCacheEntry (mkName LogViewWidgetItself)
  where
   copy val = do
-    liftIO $ Osc52.copy $ Bytes.Lazy.toStrict (encode val)
+    cm <- use $ widgetState . #copyMethod
+    liftIO case cm of
+      Osc52 -> Osc52.copy (encode val)
+      Native -> Native.copy (encode val)
     callbacks.copied
   stringifyErr = Text.pack . M.errorBundlePretty
   updateFilteredValue = do

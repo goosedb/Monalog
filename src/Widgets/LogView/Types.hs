@@ -19,8 +19,11 @@ data LogViewWidget = LogViewWidget
   , width :: WidgetSize
   , height :: WidgetSize
   , jsonpathFilteredValue :: Either Text Value
+  , copyMethod :: CopyMethod
   }
   deriving (Generic)
+
+data CopyMethod = Native | Osc52
 
 emptyLogWidget :: LogViewWidget
 emptyLogWidget =
@@ -31,6 +34,7 @@ emptyLogWidget =
     , jsonpathFilteredValue = Right (Array $ fromList [])
     , width = Auto
     , height = Auto
+    , copyMethod = Osc52
     }
 
 data LogViewWidgetEvent

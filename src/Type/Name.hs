@@ -67,6 +67,7 @@ data DialogWidgetName
 data LogViewWidgetName
   = LogViewWidgetViewport
   | LogViewWidgetCopyLog
+  | LogViewWidgetCopyMethod
   | LogViewWidgetJsonpathEditor
   | LogViewWidgetJsonpathCheckbox
   | LogViewWidgetItself

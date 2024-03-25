@@ -219,7 +219,6 @@ handleMouseSelect :: (Ctx s) => LineNumber -> B.EventM Name s ()
 handleMouseSelect line = do
   alreadySelected <- use (widgetState . #selectedLog)
   selecting <- B.zoom widgetState (getLineLog line)
-  maybe (pure ()) (Osc52.copy . Bytes.Lazy.toStrict . J.encode . (.value)) selecting
   if ((.idx) . snd <$> alreadySelected) == ((.idx) <$> selecting)
     then traverse_ (uncurry deselectLog) alreadySelected
     else traverse_ (select line) selecting

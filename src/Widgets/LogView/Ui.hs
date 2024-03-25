@@ -9,11 +9,7 @@ import Brick.Widgets.Skylighting qualified as B
 import Control.Lens
 import Data.Foldable qualified as F
 import Data.Generics.Labels ()
-import Data.JSONPath (JSONPathElement (..))
 import Data.Map.Strict qualified as Map
-import Data.Scientific (Scientific)
-import Data.Sequence qualified as Seq
-import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text.Encode
 import Data.Yaml qualified as Yaml
@@ -40,7 +36,6 @@ logViewWidgetDraw isActive availableSpace LogViewWidget{..} = case selectedLog o
                 B.hBox
                   [ B.renderEditor (B.hBox . map B.txt) (Is == isActive) jsonPathEditor
                   ]
-            , B.clickable (mkName LogViewWidgetCopyLog) $ B.txt "[Copy]"
             ]
         , B.withVScrollBarRenderer
             VScroll.renderer
@@ -62,6 +57,15 @@ logViewWidgetDraw isActive availableSpace LogViewWidget{..} = case selectedLog o
                  in B.vLimit (F.length preparedSource)
                       . B.renderRawSource B.txt
                       $ preparedSource
+        , B.hBox
+            [ B.clickable (mkName LogViewWidgetCopyLog) $ B.txt "[Copy]"
+            , B.padLeft B.Max
+                . B.clickable (mkName LogViewWidgetCopyMethod)
+                . B.txt
+                $ case copyMethod of
+                  Osc52 -> "[Osc52]"
+                  Native -> "[Native]"
+            ]
         ]
  where
   source val =
@@ -83,19 +87,3 @@ logViewWidgetDraw isActive availableSpace LogViewWidget{..} = case selectedLog o
                   else (l + Text.length tokText, a & _head %~ (tok :))
         do (0 :: Int, [[]])
     do source val
-
-data Token = Key Path Text | ListItem Path | Number Scientific | Boolean Bool | Text Text | Space Int | Null | Colon | NewLine
-
-type Path = Seq.Seq JSONPathElement
-data TokenizationState = TokenizationState
-  { path :: Path
-  , ident :: Int
-  , limit :: Int
-  , column :: Int
-  }
-
-split :: Int -> Text -> [Text]
-split n (Text.splitAt n -> (a, b)) = a : if Text.null b then [] else split n b
-
-showt :: (Show a) => a -> Text
-showt = Text.pack . show
