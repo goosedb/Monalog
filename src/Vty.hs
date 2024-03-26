@@ -24,5 +24,5 @@ withVty action = do
     tty <- handleToFd ttyHandle
 #endif
     defSettings <- Vty.defaultSettings
-    vty <- Vty.mkVtyWithSettings Vty.defaultConfig defSettings{Vty.settingInputFd = tty, Vty.settingOutputFd = tty}
+    vty <- Vty.mkVtyWithSettings Vty.defaultConfig defSettings{Vty.settingInputFd = tty}
     action vty

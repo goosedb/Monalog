@@ -46,6 +46,7 @@ import Type.Field
 import Type.Name
 import Ui (drawUi)
 import Vty (withVty)
+import Widgets.LogView.Types (CopyMethod)
 
 data Input = Stdin | File FilePath
 data Format = Json | Csv
@@ -68,6 +69,7 @@ data AppConfig = AppConfig
   { defaultField :: Maybe Text
   , format :: Maybe Format
   , fields :: Maybe [Text]
+  , copyMethod :: Maybe CopyMethod
   }
   deriving (Generic, FromJSON)
 
@@ -106,7 +108,7 @@ app AppArguments{..} = do
               defaultFields <- forM (fromConfig config (.fields)) do
                 traverse (maybe (throwIO $ MkFatalError "Failed to parse default fields from config") pure . parseField)
 
-              freshState <- initialState defaultFields
+              freshState <- initialState (fromConfig config (.copyMethod)) defaultFields
 
               finally
                 do

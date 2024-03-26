@@ -10,7 +10,6 @@ import Copy.Native qualified as Native
 import Copy.Osc52 qualified as Osc52
 import Data.Aeson (encode)
 import Data.Aeson.Types (Value (..))
-import Data.ByteString.Lazy qualified as Bytes.Lazy
 import Data.Generics.Labels ()
 import Data.JSONPath.Execute qualified as PE
 import Data.JSONPath.Parser qualified as JP

@@ -9,11 +9,8 @@ import Control.Concurrent.STM (atomically, newTQueueIO, readTQueue, writeTQueue)
 import Control.Lens
 import Control.Monad (forM_, forever, void, when)
 import Control.Monad.IO.Class (liftIO)
-import Copy.Osc52 qualified as Osc52
 import Data.Aeson (Value (..))
-import Data.Aeson qualified as J
 import Data.Bool (bool)
-import Data.ByteString.Lazy qualified as Bytes.Lazy
 import Data.Foldable (traverse_)
 import Data.Generics.Labels ()
 import Data.Maybe (fromJust)

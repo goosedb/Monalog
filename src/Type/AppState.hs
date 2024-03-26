@@ -14,10 +14,11 @@ import Type.WidgetSize (WidgetSize (..))
 import Widgets.Dialog.Types (DialogWidget)
 import Widgets.Editor (emptyEditor)
 import Widgets.Fields.Types
-import Widgets.LogView.Types (LogViewWidget, emptyLogWidget)
+import Widgets.LogView.Types (LogViewWidget, emptyLogWidget, CopyMethod)
 import Widgets.LogsView.Types
 import Widgets.Query.Types
 import Widgets.StatusBar.Types (StatusBarWidget (..))
+import Control.Lens
 
 data MouseState = Up | Down N.Name B.Location
   deriving (Eq, Show)
@@ -43,8 +44,8 @@ data ActiveWidgetName
   | DialogWidgetName
   deriving (Eq)
 
-initialState :: Maybe [Field] -> IO AppState
-initialState defaultFields = do
+initialState :: Maybe CopyMethod -> Maybe [Field] -> IO AppState
+initialState copyMethod defaultFields = do
   let defaultWidth = MaxWidth 1
   initialLogsView <- initLogsView (maybe [] (map (`SelectedField` defaultWidth)) defaultFields)
   let fields = maybe initialFields (Map.fromList . map (,FieldState{isSelected = True, maxWidth = defaultWidth})) defaultFields
@@ -52,7 +53,7 @@ initialState defaultFields = do
     AppState
       { dialogWidget = Nothing
       , logsView = initialLogsView
-      , logView = emptyLogWidget
+      , logView = emptyLogWidget & #copyMethod %~ maybe id const copyMethod
       , statusBar =
           StatusBarWidget
             { totalLines = 0
