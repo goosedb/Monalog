@@ -85,7 +85,12 @@ Mouse is fully supported. You can
 
 ## Copying
 Monalog supports two way to copy data:
-  * Native. Monalog calls platform specific commands (which can be overwritten with config)
+  * Native. Monalog calls platform specific commands (which can be overwritten with config). Default commands:
+      | OS        | Command           |
+      | --------- | ----------------- |
+      | `Macos`   | `pbcopy`          |
+      | `Windows` | `clip`            |
+      | `Linux`   | `xclip -sel clip` |
   * Osc52. Check out if your terminal supports OSC52  
 
 Copying is available in log entry view using `[Copy]` button

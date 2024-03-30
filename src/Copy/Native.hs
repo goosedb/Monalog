@@ -15,8 +15,9 @@ copy :: (MonadIO m) => Maybe String -> Bytes.Lazy.ByteString -> m (Either Text (
 copy userCmd bytes = liftIO do
   let setInput = setStdin (byteStringInput bytes)
       setErr = setStderr byteStringOutput
+      setOutput = setStdout byteStringOutput
   let run cmd = do
-        process <- startProcess $ setErr $ setInput $ shell cmd
+        process <- startProcess $ setErr $ setOutput $ setInput $ shell cmd
         waitExitCode process
           >>= atomically . \case
             ExitSuccess -> pure (Right ())
