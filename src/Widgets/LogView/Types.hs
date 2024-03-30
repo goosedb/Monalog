@@ -2,7 +2,7 @@ module Widgets.LogView.Types where
 
 import Brick qualified as B
 import Brick.Widgets.Edit qualified as B
-import Data.Aeson (Value (..), FromJSON (..), withText)
+import Data.Aeson (FromJSON (..), Value (..), withText)
 import Data.Text (Text)
 import GHC.Exts (IsList (..))
 import GHC.Generics
@@ -20,6 +20,7 @@ data LogViewWidget = LogViewWidget
   , height :: WidgetSize
   , jsonpathFilteredValue :: Either Text Value
   , copyMethod :: CopyMethod
+  , nativeCopyCmd :: Maybe String
   }
   deriving (Generic)
 
@@ -41,6 +42,7 @@ emptyLogWidget =
     , width = Auto
     , height = Auto
     , copyMethod = Osc52
+    , nativeCopyCmd = Nothing
     }
 
 data LogViewWidgetEvent
@@ -50,8 +52,10 @@ data LogViewWidgetEvent
   | Move LogViewWidgetName B.Location B.Location
   | Key V.Key [V.Modifier]
 
-newtype LogViewWidgetCallbacks s = LogViewWidgetCallbacks
-  {copied :: B.EventM Name s ()}
+data LogViewWidgetCallbacks s = LogViewWidgetCallbacks
+  { copied :: B.EventM Name s ()
+  , copyError :: Text -> B.EventM Name s ()
+  }
 
 mkName :: LogViewWidgetName -> Name
 mkName = WidgetName . LogViewWidgetName

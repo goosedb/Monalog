@@ -6,13 +6,15 @@ author:        goosedb
 maintainer:    goosedb@yandex.ru
 
 library
+  ghc-options:      -Wall
   -- cabal-fmt: expand src
   exposed-modules:
     App
     Buffer
+    Config
     Consts
-    Copy.Osc52
     Copy.Native
+    Copy.Osc52
     Handler
     Path
     Query
@@ -21,6 +23,7 @@ library
     SourceFormat.Csv
     SourceFormat.Json
     SourceFormat.Utils
+    System
     Type.AppState
     Type.AvailableSpace
     Type.Config
@@ -71,6 +74,7 @@ library
     , cassava
     , conduit
     , containers
+    , directory
     , effectful
     , filepath
     , fuzzy
@@ -88,7 +92,6 @@ library
     , stm
     , text
     , text-zipper
-    , typed-process
     , time
     , transformers
     , typed-process
@@ -134,6 +137,10 @@ executable monalog
   main-is:          Main.hs
   build-depends:
     , base
+    , lens
+    , text
+    , directory
+    , generic-lens
     , monalog
     , optparse-applicative
 

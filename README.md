@@ -12,8 +12,8 @@ Monalog is terminal logs observer.
 ## Running 
 ```bash
 monalog --help
-Usage: monalog [FILE] [-f|--format FORMAT] [-d|--default-field FIELD] 
-               [-c|--config CONFIG] [-i|--ignore-config]
+Usage: monalog [COMMAND | [FILE] [-f|--format FORMAT] [-d|--default-field FIELD]
+                 [-c|--config CONFIG] [-i|--ignore-config ARG]]
 
 Available options:
   FILE                     The format can be derived from the file format. If
@@ -21,8 +21,11 @@ Available options:
                            otherwise it will be json.
   -f,--format FORMAT       Supported formats: json, csv. In the case of csv, the
                            first line is considered the header.
-  -i,--ignore-config       Makes monalog ignore config
+  -i,--ignore-config ARG   Expected values: global, local, all
   -h,--help                Show this help text
+
+Available commands:
+  config                   Work with config
 
 monalog my_logs.json
 # or 
@@ -47,7 +50,7 @@ run_logging_server | monalog --format=json
 | `j`, `up`            | Shift up            |
 | `J`, `Shift + up`    | Long shift up       |
 | `k`, `down`          | Shift down          |
-| `K`, `Shift + down`  | Long shift down      |
+| `K`, `Shift + down`  | Long shift down     |
 | `s`                  | Select top line log |
 | `scroll`             | Shift up/down       |
 | `Ctrl + scroll`      | Shift left/right    |
@@ -66,22 +69,25 @@ Mouse is fully supported. You can
 | ------------ | ------------------------------------------------------------------------------------------------------ |
 | `=` , `!=`   |                                                                                                        |
 | `>`, `<`     | Compares `number` with `number`, `string` with `string`, `bool` with `bool`. Otherwise returns `false` |
-| `<=`, `>=`   | Exactly `>` or `=`                                                                                     |
+| `>=`, `<=`   | Exactly `>`/`<` or `=`                                                                                 |
 | `&&`, `\|\|` | Works with `bool`. For operands of other types returns `false`                                         |
 | `not`        | Negates argument                                                                                       |
-| `like`       | Fuzzy text comparison                                                                                    |
+| `like`       | Fuzzy text comparison                                                                                  |
 | `in`         | Checks if left operand is element of list in right operand`                                            |
 
-| Literal | Example                    |
-| ------- | -------------------------- |
-| number  | `5`, `34.2`                |
-| string  | `"foo"`, `"foo \"hello\""` |
-| bool    | `true`, `false`            |
-| array   | `[1, true, "bar"]`         |
-| key     | `_42foo`, `fOooBar`        |
+| Literal | Example                                    |
+| ------- | ------------------------------------------ |
+| number  | `5`, `34.2`, `-42`                         |
+| string  | `"foo"`, `"foo \"hello\""`                 |
+| bool    | `true`, `false`                            |
+| array   | `[1, true, "bar"]`                         |
+| key     | `_42foo`, `fOooBar`, `$"any \"string\" 1"` |
 
 ## Copying
-Now only OSC52 copying is implemented. Check out if your terminal supports OSC52  
+Monalog supports two way to copy data:
+  * Native. Monalog calls platform specific commands (which can be overwritten with config)
+  * Osc52. Check out if your terminal supports OSC52  
+
 Copying is available in log entry view using `[Copy]` button
 
 ## Log view
@@ -96,10 +102,10 @@ Fields view supports 2 display mods
 which can be toggled with button `[Nested]`/`[Flatten]`
 
 ## Input formats
-| Format | Details                                                                                                                                             |
-| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Format | Details                                                                                                                                                                                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | json   | Means `jsonlines`. If line is not valid JSON then line is put to default field of JSON ( `{ "message": "some invalid json" }` ). Default field is `message` but can it be overwritten via cli or config |
-| csv    | The first line is supposed to be header                                                                                                             |
+| csv    | The first line is supposed to be header                                                                                                                                                                 |
 
 
 ## Config
@@ -113,7 +119,22 @@ fields:
   - foo.bar 
 format: csv # csv / json
 defaultField: data.msg # useful for json only 
-
+copyMethod: native # native / osc52
+copyCommand: "xclip -sel clip"
 ```
+
+Monalog can create config automatically
+```bash
+monalog config create --global # creates global config
+monalog config create # creates local config
+```
+
+To find out where is config located use the following command
+```bash
+monalog config path global
+```
+
+To get more info use `--help`
+
 ---
 Thanks to [@ShrykeWindgrace](https://github.com/ShrykeWindgrace) for help with Windows support implementation

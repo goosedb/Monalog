@@ -5,7 +5,6 @@ module Widgets.LogView.Handler where
 import Brick qualified as B
 import Brick.Widgets.Edit qualified as B
 import Control.Lens
-import Control.Monad.IO.Class (MonadIO (..))
 import Copy.Native qualified as Native
 import Copy.Osc52 qualified as Osc52
 import Data.Aeson (encode)
@@ -84,9 +83,10 @@ logViewWidgetHandleEvent logViewPosition widgetState callbacks = \case
  where
   copy val = do
     cm <- use $ widgetState . #copyMethod
-    liftIO case cm of
+    cmd <- use $ widgetState . #nativeCopyCmd
+    case cm of
       Osc52 -> Osc52.copy (encode val)
-      Native -> Native.copy (encode val)
+      Native -> Native.copy cmd (encode val) >>= either callbacks.copyError pure
     callbacks.copied
   stringifyErr = Text.pack . M.errorBundlePretty
   updateFilteredValue = do

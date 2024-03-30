@@ -26,7 +26,8 @@ drawUi AS.AppState{..} =
   [ case activeWidget of
       (AS.DialogWidgetName : _) -> maybe B.emptyWidget dialogWidgetDraw dialogWidget
       _ -> B.emptyWidget
-  , sortExtents
+  , B.joinBorders
+      . sortExtents
       . B.border
       . B.vBox
       $ [ B.padLeftRight 1 (queryWidgetDraw isQueryWidgetActive queryView)

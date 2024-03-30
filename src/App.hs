@@ -8,6 +8,7 @@ import Brick.BChan qualified as B
 import Brick.Widgets.Skylighting qualified as B
 import Buffer (Buffer (..), makeBuffer)
 import Conduit (MonadIO (..))
+import Config
 import Control.Applicative ((<|>))
 import Control.Concurrent (forkIO)
 import Control.Exception (finally, throwIO)
@@ -16,21 +17,19 @@ import Data.Aeson
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.Parser qualified as P
 import Data.Attoparsec.ByteString qualified as P
-import Data.ByteString.Lazy qualified as Bytes
 import Data.Conduit qualified as C
 import Data.Conduit.Combinators qualified as C
 import Data.Generics.Labels ()
 import Data.List.NonEmpty qualified as Nel
 import Data.Maybe (listToMaybe)
+import Data.Monoid (Last (getLast))
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as Text.IO
 import Data.Traversable (forM)
-import Data.Yaml qualified as Yaml
 import Effectful qualified as Eff
 import Effectful.Resource qualified as Eff
 import Effectful.State.Static.Local qualified as Eff
-import GHC.Generics (Generic)
 import GHC.IO (catchException)
 import Graphics.Vty qualified as V
 import Handler (handleEvent)
@@ -39,44 +38,25 @@ import SourceFormat.Csv qualified as Csv
 import SourceFormat.Json qualified as Json
 import System.FilePath qualified as Path
 import System.IO (IOMode (ReadMode), stdin, withFile)
-import System.IO.Error
 import Type.AppState
 import Type.Event
 import Type.Field
 import Type.Name
 import Ui (drawUi)
 import Vty (withVty)
-import Widgets.LogView.Types (CopyMethod)
-
-data Input = Stdin | File FilePath
-data Format = Json | Csv
-
-instance FromJSON Format where
-  parseJSON = withText "Format" \case
-    "csv" -> pure Csv
-    "json" -> pure Json
-    _ -> fail "Failed to parse format"
 
 data AppArguments = AppArguments
   { input :: Input
   , format :: Maybe Format
   , mbDefaultField :: Maybe Text
   , configPath :: Maybe FilePath
-  , ignoreConfig :: Bool
+  , ignoreConfig :: Maybe ConfigType
   }
-
-data AppConfig = AppConfig
-  { defaultField :: Maybe Text
-  , format :: Maybe Format
-  , fields :: Maybe [Text]
-  , copyMethod :: Maybe CopyMethod
-  }
-  deriving (Generic, FromJSON)
 
 app :: AppArguments -> IO ()
 app AppArguments{..} = do
   let run = do
-        config <- if ignoreConfig then pure Nothing else readConfigFromFile
+        config <- loadConfig configPath ignoreConfig
         defaultField <- parseDefaultField (mbDefaultField <|> fromConfig config (.defaultField))
         withVty \vty -> do
           ch <- newBChan maxBound
@@ -108,7 +88,11 @@ app AppArguments{..} = do
               defaultFields <- forM (fromConfig config (.fields)) do
                 traverse (maybe (throwIO $ MkFatalError "Failed to parse default fields from config") pure . parseField)
 
-              freshState <- initialState (fromConfig config (.copyMethod)) defaultFields
+              freshState <-
+                initialState
+                  (fromConfig config (.copyCommand))
+                  (fromConfig config (.copyMethod))
+                  defaultFields
 
               finally
                 do
@@ -124,33 +108,8 @@ app AppArguments{..} = do
 
   run `catchException` \case MkFatalError e -> Text.IO.putStrLn e
  where
-  fromConfig :: Maybe AppConfig -> (AppConfig -> Maybe a) -> Maybe a
-  fromConfig cfg v = cfg >>= v
-
-  catchFileNotFound e =
-    if isDoesNotExistErrorType (ioeGetErrorType e)
-      then pure Nothing
-      else throwIOError e
-
-  throwIOError = throwIO . MkFatalError . Text.pack . ioeGetErrorString
-
-  readConfigFromFile =
-    let readConfig =
-          case configPath of
-            Nothing -> (Just <$> Bytes.readFile "monalog.yaml") `catchException` catchFileNotFound
-            Just path -> Just <$> Bytes.readFile path `catchException` throwIOError
-     in readConfig
-          >>= traverse
-            ( either
-                ( throwIO
-                    . MkFatalError
-                    . Text.pack
-                    . Yaml.prettyPrintParseException
-                )
-                pure
-                . Yaml.decodeEither' @AppConfig
-                . Bytes.toStrict
-            )
+  fromConfig :: AppConfig -> (AppConfig -> Last a) -> Maybe a
+  fromConfig cfg v = getLast . v $ cfg
 
 brickApp :: B.BChan Event -> B.App AppState Event Name
 brickApp ch =

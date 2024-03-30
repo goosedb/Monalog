@@ -3,6 +3,7 @@ module Type.AppState where
 import Brick qualified as B
 import Brick.Widgets.Edit qualified as B
 import Consts
+import Control.Lens
 import Data.Map.Strict qualified as Map
 import Data.String (IsString (..))
 import GHC.Generics
@@ -14,11 +15,10 @@ import Type.WidgetSize (WidgetSize (..))
 import Widgets.Dialog.Types (DialogWidget)
 import Widgets.Editor (emptyEditor)
 import Widgets.Fields.Types
-import Widgets.LogView.Types (LogViewWidget, emptyLogWidget, CopyMethod)
+import Widgets.LogView.Types (CopyMethod, LogViewWidget, emptyLogWidget)
 import Widgets.LogsView.Types
 import Widgets.Query.Types
 import Widgets.StatusBar.Types (StatusBarWidget (..))
-import Control.Lens
 
 data MouseState = Up | Down N.Name B.Location
   deriving (Eq, Show)
@@ -44,8 +44,8 @@ data ActiveWidgetName
   | DialogWidgetName
   deriving (Eq)
 
-initialState :: Maybe CopyMethod -> Maybe [Field] -> IO AppState
-initialState copyMethod defaultFields = do
+initialState :: Maybe String -> Maybe CopyMethod -> Maybe [Field] -> IO AppState
+initialState copyCmd copyMethod defaultFields = do
   let defaultWidth = MaxWidth 1
   initialLogsView <- initLogsView (maybe [] (map (`SelectedField` defaultWidth)) defaultFields)
   let fields = maybe initialFields (Map.fromList . map (,FieldState{isSelected = True, maxWidth = defaultWidth})) defaultFields
@@ -53,7 +53,10 @@ initialState copyMethod defaultFields = do
     AppState
       { dialogWidget = Nothing
       , logsView = initialLogsView
-      , logView = emptyLogWidget & #copyMethod %~ maybe id const copyMethod
+      , logView =
+          emptyLogWidget
+            & #copyMethod %~ maybe id const copyMethod
+            & #nativeCopyCmd .~ copyCmd
       , statusBar =
           StatusBarWidget
             { totalLines = 0

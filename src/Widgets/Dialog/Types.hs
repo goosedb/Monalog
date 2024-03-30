@@ -6,7 +6,8 @@ import GHC.Generics (Generic)
 import Type.Name
 
 data DialogWidget s = DialogWidget
-  { dialogMessage :: Text
+  { title :: Text
+  , dialogMessage :: Text
   , actions :: [(Text, B.EventM Name s ())]
   , selected :: Int
   }

@@ -55,7 +55,7 @@ queryParser = hspace *> expr <* eof
       [ Bool True <$ "true"
       , Bool False <$ "false"
       , Null <$ "null"
-      , String <$> between "\"" "\"" (Text.concat <$> many (M.string "\\\"" <|> (Text.singleton <$> M.noneOf ['\"'])))
+      , String <$> stringP
       , Number . fromRational . toRational @Double <$> M.signed (pure ()) (try M.float <|> M.decimal)
       , Array . fromList <$> between
           do "[" >> hspace
@@ -63,7 +63,11 @@ queryParser = hspace *> expr <* eof
           do (valueParser <* hspace) `sepBy` ("," >> hspace)
       ]
 
-  keyParser = fmap (Key.fromText . Text.pack) $ (:) <$> oneOf a1 <*> many (oneOf a2)
+  stringP = between "\"" "\"" (Text.concat <$> many (M.string "\\\"" <|> (Text.singleton <$> M.noneOf ['\"'])))
+
+  keyParser = Key.fromText <$> (simpleKey <|> ("$" *> stringP))
    where
+    simpleKey = fmap Text.pack $ (:) <$> oneOf a1 <*> many (oneOf a2)
     a1 = '_' : ['a' .. 'z'] <> ['A' .. 'Z']
     a2 = a1 <> ['0' .. '9']
+

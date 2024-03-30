@@ -96,6 +96,7 @@ handleEvent ch e = do
     B.VtyEvent (V.EvKey (V.KChar 'd') [V.MCtrl]) -> B.halt
     B.VtyEvent (V.EvKey (V.KChar 'q') [V.MCtrl]) ->
       dialog
+        "Confirm action"
         "Are you sure you want to cleanup logs?"
         [("Yes", cleanupLogs), ("No", closeDialog)]
         1
@@ -164,7 +165,10 @@ handleEvent ch e = do
     LogView.logViewWidgetHandleEvent
       logViewPosition
       #logView
-      LogView.LogViewWidgetCallbacks{copied = callStatusBarWidget StatusBar.SetCopied}
+      LogView.LogViewWidgetCallbacks
+        { copied = callStatusBarWidget StatusBar.SetCopied
+        , copyError = errorDialog
+        }
       a
 
   callStatusBarWidget =
@@ -225,12 +229,7 @@ handleEvent ch e = do
           activateLogsView
           callLogsViewWidget $ LogsView.RunFilter ch q
       , Query.clearFilter = callLogsViewWidget LogsView.ClearFilter
-      , Query.showError = \txt ->
-          dialog
-            txt
-            [ ("Ok", closeDialog)
-            ]
-            0
+      , Query.showError = errorDialog
       }
 
   fieldsWidgetCallbacks =
@@ -261,11 +260,12 @@ handleEvent ch e = do
     #logView . #selectedLog .= Nothing
     closeDialog
 
-  dialog text actions selected = do
+  dialog title text actions selected = do
     #activeWidget %= (AS.DialogWidgetName :)
     #dialogWidget
       .= Just
         ( Dialog.DialogWidget
+            title
             text
             actions
             selected
@@ -276,3 +276,11 @@ handleEvent ch e = do
       AS.DialogWidgetName -> False
       _ -> True
     #dialogWidget .= Nothing
+
+  errorDialog txt =
+    dialog
+      "Error"
+      txt
+      [ ("Ok", closeDialog)
+      ]
+      0

@@ -10,7 +10,7 @@ import Type.Name
 import Widgets.Dialog.Types
 
 dialogWidgetDraw :: DialogWidget s -> B.Widget Name
-dialogWidgetDraw DialogWidget{..} = B.centerLayer $ B.border $ B.padAll 1 do
+dialogWidgetDraw DialogWidget{..} = B.centerLayer $ B.borderWithLabel widgetTitle $ B.padAll 1 do
   B.hLimit (maximum . map Text.length . Text.lines $ dialogMessage) do
     B.vBox
       [ B.txt dialogMessage
@@ -31,3 +31,5 @@ dialogWidgetDraw DialogWidget{..} = B.centerLayer $ B.border $ B.padAll 1 do
                 [0 ..]
                 actions
       ]
+ where
+  widgetTitle = B.hBox $ map B.txt ["[", title, "]"]
