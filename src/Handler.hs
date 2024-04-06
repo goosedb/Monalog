@@ -47,7 +47,7 @@ handleEvent ch e = do
         callLogsViewWidget (LogsView.NewLog l)
       FilteredLogs ls -> forM_ ls \l -> do
         callLogsViewWidget (LogsView.FilteredLog l)
-      ResetCopied -> callStatusBarWidget StatusBar.ResetCopied
+      ResetCopied -> callStatusBarWidget StatusBar.ResetStatus
     B.MouseDown (WidgetName name) V.BLeft _ loc' | ms == Up -> do
       absoluteLoc <- translateToAbsolute (WidgetName name) loc'
       let canClick = case activeWidget of
@@ -249,7 +249,8 @@ handleEvent ch e = do
               do \mw -> LogsView.SelectedField{width = mw, ..}
               do Map.lookup path paths
             _ -> f
-      , holdMouse = \n l -> #mouseState .= Down n l
+      , Fields.configSaved = callStatusBarWidget StatusBar.ConfigSaved
+      , Fields.holdMouse = \n l -> #mouseState .= Down n l
       }
 
   activateLogsView = #activeWidget .= [AS.LogsWidgetName]

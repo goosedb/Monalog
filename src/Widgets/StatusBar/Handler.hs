@@ -5,6 +5,7 @@ import Brick.BChan qualified as B
 import Brick.Widgets.Edit qualified as B
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Lens
+import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO (..))
 import Data.Char (isDigit)
 import Data.Generics.Labels ()
@@ -53,12 +54,13 @@ statusBarWidgetHandleEvent ch widgetState StatusBarWidgetCallbacks{..} = \case
   ResetFollow -> do
     widgetState . #followLogs .= False
   SetCopied -> do
-    _ <- liftIO $ forkIO do
-      threadDelay 2000000
-      B.writeBChan ch E.ResetCopied
-    widgetState . #copied .= True
-  ResetCopied -> do
-    widgetState . #copied .= False
+    scheduleStatusResetAfter2Seconds
+    widgetState . #status .= JustCopied
+  ResetStatus -> do
+    widgetState . #status .= Idle
+  ConfigSaved -> do
+    scheduleStatusResetAfter2Seconds
+    widgetState . #status .= JustSavedConfig
   Key key mods -> do
     use (widgetState . #isEditorActive) >>= \case
       True -> case key of
@@ -74,6 +76,11 @@ statusBarWidgetHandleEvent ch widgetState StatusBarWidgetCallbacks{..} = \case
         k -> B.zoom (widgetState . #topLineEditor) do
           B.handleEditorEvent (B.VtyEvent (V.EvKey k mods))
       False -> pure ()
+ where
+  scheduleStatusResetAfter2Seconds = do
+    void $ liftIO $ forkIO do
+      threadDelay 2000000
+      B.writeBChan ch E.ResetCopied
 
 newEditor :: Text.Text -> B.Editor Text.Text Name
 newEditor = B.editorText (mkName StatusBarWidgetEditor) (Just 1)

@@ -18,7 +18,7 @@ import Widgets.Fields.Types
 import Widgets.LogView.Types (CopyMethod, LogViewWidget, emptyLogWidget)
 import Widgets.LogsView.Types
 import Widgets.Query.Types
-import Widgets.StatusBar.Types (StatusBarWidget (..))
+import Widgets.StatusBar.Types (StatusBarStatus (..), StatusBarWidget (..))
 
 data MouseState = Up | Down N.Name B.Location
   deriving (Eq, Show)
@@ -69,7 +69,7 @@ initialState copyCmd copyMethod defaultFields = do
             , topLine = initialTopLine
             , followLogs = initialFollowLogs
             , logViewPosition = LogViewPositionRight
-            , copied = False
+            , status = Idle
             }
       , fieldsView =
           FieldsWidget
