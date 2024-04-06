@@ -1,8 +1,10 @@
 module Widgets.Fields.Handler where
 
 import Brick qualified as B
+import Config (DumpError (..), dumpConfigToLocal)
 import Control.Lens
 import Control.Monad (forM_, unless)
+import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (Value (..), encode)
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Bifunctor (Bifunctor (..))
@@ -49,8 +51,12 @@ fieldsWidgetHandleEvent widgetState cb@FieldsWidgetCallbacks{..} = \case
       Nested -> Flatten
     B.invalidateCache
   Click FieldWidgetSaveConfig _ -> do
-    cb.configSaved
-    pure ()
+    config <- cb.getConfig
+    result <- liftIO $ dumpConfigToLocal config
+    cb.configSaved $ case result of
+      Left (FileExists path) -> SaveErrorHappened $ "File " <> Text.pack path <> " already exists"
+      Left (UnexpectedError e) -> SaveErrorHappened $ "Unexpected error: " <> e
+      Right _ -> SavedSuccessfully
   Click (FieldWidgetField field) _ -> do
     fields <- use $ widgetState . #fields
     let isFieldUpdating k = case (field, k) of
@@ -68,8 +74,8 @@ fieldsWidgetHandleEvent widgetState cb@FieldsWidgetCallbacks{..} = \case
       (if setToActive then fieldSelected maxWidth else fieldUnselected) f
     B.invalidateCache
     widgetState . #fields .= updatedFields
-  Scroll i -> B.vScrollBy (B.viewportScroll (mkName FieldWidgetViewport)) i
-  AltScroll i -> B.hScrollBy (B.viewportScroll (mkName FieldWidgetViewport)) i
+  Scroll i -> B.vScrollBy (B.viewportScroll $ mkName FieldWidgetViewport) i
+  AltScroll i -> B.hScrollBy (B.viewportScroll $ mkName FieldWidgetViewport) i
   CleanupFields -> do
     defaultFields <- use $ widgetState . #defaultFields
     widgetState . #fields .= defaultFields

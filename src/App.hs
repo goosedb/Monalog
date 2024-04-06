@@ -58,11 +58,12 @@ app :: AppArguments -> IO ()
 app AppArguments{..} = do
   let run = do
         config <- loadConfig configPath ignoreConfig
-        defaultField' <- parseDefaultField (defaultField <|> fromConfig config (.defaultField))
+        defaultFieldParsed <- parseDefaultField (defaultField <|> fromConfig config (.defaultField))
         withVty \vty -> do
           ch <- newBChan maxBound
-          let withStream handle action = case reifyFormat (format <|> fromConfig config (.format)) input of
-                Json -> action (Json.jsonLinesReader (prefix <|> fromConfig config (.prefix)) defaultField' handle)
+          let formatType = reifyFormat (format <|> fromConfig config (.format)) input
+              withStream handle action = case formatType of
+                Json -> action (Json.jsonLinesReader (prefix <|> fromConfig config (.prefix)) defaultFieldParsed handle)
                 Csv -> Csv.csvReader handle >>= action
           let withLogsHandle action = case input of
                 Stdin -> action stdin
@@ -101,7 +102,7 @@ app AppArguments{..} = do
                     do vty
                     do pure vty
                     do Just ch
-                    do brickApp ch
+                    do brickApp formatType config ch
                     do freshState
                 do
                   V.shutdown vty
@@ -112,12 +113,12 @@ app AppArguments{..} = do
   fromConfig :: AppConfig -> (AppConfig -> Last a) -> Maybe a
   fromConfig cfg v = getLast . v $ cfg
 
-brickApp :: B.BChan Event -> B.App AppState Event Name
-brickApp ch =
+brickApp :: Format -> AppConfig -> B.BChan Event -> B.App AppState Event Name
+brickApp format config ch =
   B.App
     { appDraw = drawUi
     , appChooseCursor = const listToMaybe
-    , appHandleEvent = handleEvent ch
+    , appHandleEvent = handleEvent format config ch
     , appStartEvent = do
         vty <- B.getVtyHandle
         let output = V.outputIface vty
@@ -135,14 +136,14 @@ reifyFormat format input = case format of
   _ -> Json
 
 parseDefaultField :: Maybe Text -> IO [Key.Key]
-parseDefaultField mbDefaultField = maybe
+parseDefaultField defaultField = maybe
   do pure ["message"]
   do
     \k -> maybe
       do throwIO $ MkFatalError "Failed to parse json key supposed to be default field"
       do pure
       do parsePath k
-  do mbDefaultField
+  do defaultField
 
 parseField :: Text -> Maybe Field
 parseField "@timestamp" = Just Timestamp

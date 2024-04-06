@@ -6,6 +6,7 @@ import Data.Aeson.Key qualified as Key
 import Data.Foldable qualified as F
 import Data.Function ((&))
 import Data.Generics.Labels ()
+import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 import Data.Maybe (mapMaybe)
 import Data.Text qualified as Text
@@ -70,9 +71,10 @@ fieldsWidgetDraw FieldsWidget{..} =
 
   contentWidth =
     Map.toList fields
-      & map (Text.length . drawLogsViewColumnHeaderTxt . fst)
-      & maximum
-      & (+ 6)
+      & NE.nonEmpty
+      & fmap (NE.map (Text.length . drawLogsViewColumnHeaderTxt . fst))
+      & fmap (maximum . NE.toList)
+      & maybe 6 (+ 6)
 
   drawButton n path k isSelected =
     B.hBox

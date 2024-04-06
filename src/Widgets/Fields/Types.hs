@@ -1,8 +1,10 @@
 module Widgets.Fields.Types where
 
 import Brick qualified as B
+import Config (AppConfig)
 import Data.Aeson (ToJSON)
 import Data.Map.Strict qualified as Map
+import Data.Text (Text)
 import GHC.Generics (Generic)
 import Type.Field (Field (..), Path)
 import Type.Log (Log)
@@ -26,12 +28,15 @@ data FieldsWidget = FieldsWidget
 
 data FieldsViewLayout = Flatten | Nested
 
+data ConfigSavingResult = SavedSuccessfully | SaveErrorHappened Text
+
 data FieldsWidgetCallbacks s = FieldsWidgetCallbacks
   { fieldSelected :: MaxWidth -> Field -> B.EventM Name s ()
   , fieldUnselected :: Field -> B.EventM Name s ()
   , fieldsChangedMaxSize :: Map.Map Path MaxWidth -> B.EventM Name s ()
   , holdMouse :: Name -> B.Location -> B.EventM Name s ()
-  , configSaved :: B.EventM Name s ()
+  , configSaved :: ConfigSavingResult -> B.EventM Name s ()
+  , getConfig :: B.EventM Name s AppConfig
   }
 
 data FieldWidgetEvent

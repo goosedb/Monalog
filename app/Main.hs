@@ -67,13 +67,13 @@ viewerArgs = do
           _ -> Nothing
      in optional . option reader $ i
 
-  prefix <- 
+  prefix <-
     let i = long "prefix" <> short 'p'
         reader = maybeReader \case
           "empty" -> Just Empty
           "kube-tm" -> Just KubeTm
           _ -> Nothing
-    in optional . option reader $ i
+     in optional . option reader $ i
 
   pure $ AppArguments{..}
 
@@ -146,8 +146,9 @@ createConfig force path = do
         , format = Last $ Just Json
         , copyMethod = Last $ Just Native
         , copyCommand = Last Nothing
+        , prefix = Last Nothing
         }
   case result of
-    Left Config.FileExists -> putStrLn $ "Error saving a config: file exists. Use --force to overwrite."
+    Left (Config.FileExists path) -> putStrLn $ "Error saving a config: file " <> path <> " exists. Use --force to overwrite."
     Left (Config.UnexpectedError e) -> putStrLn $ "Error saving a config: " <> show e
     Right _ -> putStrLn $ "Config created at " <> path <> configName

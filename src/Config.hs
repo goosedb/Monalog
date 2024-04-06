@@ -42,6 +42,12 @@ instance ToJSON Format where
       Csv -> "csv"
       Json -> "json"
 
+instance ToJSON Prefix where
+  toJSON =
+    String . \case
+      KubeTm -> "kube-tm"
+      Empty -> "empty"
+
 data ConfigType = Local | Global | All
 
 data AppConfig = AppConfig
@@ -100,9 +106,9 @@ loadConfig userConfigPath = maybe
 
   throwIOError = throwFatalError . ioeGetErrorString
 
-data DumpError = FileExists | UnexpectedError Text
+data DumpError = FileExists FilePath | UnexpectedError Text
 
--- | Dumps given config to local file path as yaml
+-- | Dumps given config to local file path as yaml overriding existing
 dumpConfigToLocal :: AppConfig -> IO (Either DumpError ())
 dumpConfigToLocal = dumpConfigTo configName True
 
@@ -111,9 +117,9 @@ dumpConfigTo :: FilePath -> Bool -> AppConfig -> IO (Either DumpError ())
 dumpConfigTo path force config = do
   result <- try @SomeException $ do
     createDirectoryIfMissing True $ takeDirectory path
-    exists <- doesFileExist $ takeFileName path
+    exists <- doesFileExist path
     if not force && exists
-      then pure $ Left FileExists
+      then pure $ Left $ FileExists path
       else Right <$> encodeFile path config
   pure $ case result of
     Left ex -> Left $ UnexpectedError $ Text.pack $ show ex
