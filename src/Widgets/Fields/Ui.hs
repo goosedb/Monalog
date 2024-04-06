@@ -34,6 +34,7 @@ fieldsWidgetDraw FieldsWidget{..} =
           . B.viewport (mkName FieldWidgetViewport) B.Both
           . B.hLimit contentWidth
           $ B.vBox fieldsWidgets
+      , B.clickable (mkName FieldWidgetSaveConfig) $ B.txt "[Save]"
       ]
  where
   recMap = buildRecMap fields

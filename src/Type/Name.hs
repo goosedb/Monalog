@@ -39,6 +39,7 @@ data FieldsWidgetName
   = FieldWidgetItself
   | FieldWidgetField Field
   | FieldWidgetLayoutButton
+  | FieldWidgetSaveConfig
   | FieldWidgetViewport
   | FieldWidgetBorder
   | FieldWidgetHScrollBar B.ClickableScrollbarElement

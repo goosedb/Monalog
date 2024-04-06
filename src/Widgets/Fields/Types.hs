@@ -31,6 +31,7 @@ data FieldsWidgetCallbacks s = FieldsWidgetCallbacks
   , fieldUnselected :: Field -> B.EventM Name s ()
   , fieldsChangedMaxSize :: Map.Map Path MaxWidth -> B.EventM Name s ()
   , holdMouse :: Name -> B.Location -> B.EventM Name s ()
+  , configSaved :: B.EventM Name s ()
   }
 
 data FieldWidgetEvent

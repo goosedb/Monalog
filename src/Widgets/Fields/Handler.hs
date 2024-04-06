@@ -22,14 +22,17 @@ import Type.WidgetSize (WidgetSize (..))
 import Widgets.Fields.Types
 import Widgets.Scrollbar.Horizontal qualified as HScroll
 
-fieldsWidgetHandleEvent :: Lens' s FieldsWidget -> FieldsWidgetCallbacks s -> FieldWidgetEvent -> B.EventM Name s ()
+fieldsWidgetHandleEvent ::
+  Lens' s FieldsWidget ->
+  FieldsWidgetCallbacks s ->
+  FieldWidgetEvent ->
+  B.EventM Name s ()
 fieldsWidgetHandleEvent widgetState cb@FieldsWidgetCallbacks{..} = \case
   NewLog l -> handleNewLog widgetState cb l
   Click (FieldWidgetHScrollBar B.SBBar) loc ->
     holdMouse (mkName $ FieldWidgetHScrollBar B.SBBar) loc
   Click FieldWidgetBorder loc@(B.Location (c, _)) -> do
     B.Extent{extentUpperLeft = B.Location (lc, _)} <- fromJust <$> B.lookupExtent (mkName FieldWidgetItself)
-
     widgetState . #width .= Manual (c - lc)
     holdMouse (mkName FieldWidgetBorder) loc
   Move (FieldWidgetHScrollBar B.SBBar) prevLoc newLoc -> do
@@ -45,6 +48,9 @@ fieldsWidgetHandleEvent widgetState cb@FieldsWidgetCallbacks{..} = \case
       Flatten -> Nested
       Nested -> Flatten
     B.invalidateCache
+  Click FieldWidgetSaveConfig _ -> do
+    cb.configSaved
+    pure ()
   Click (FieldWidgetField field) _ -> do
     fields <- use $ widgetState . #fields
     let isFieldUpdating k = case (field, k) of
