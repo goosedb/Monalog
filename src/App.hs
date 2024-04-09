@@ -48,20 +48,21 @@ import Vty (withVty)
 data AppArguments = AppArguments
   { input :: Input
   , format :: Maybe Format
-  , mbDefaultField :: Maybe Text
+  , defaultField :: Maybe Text
   , configPath :: Maybe FilePath
   , ignoreConfig :: Maybe ConfigType
+  , prefix :: Maybe Prefix
   }
 
 app :: AppArguments -> IO ()
 app AppArguments{..} = do
   let run = do
         config <- loadConfig configPath ignoreConfig
-        defaultField <- parseDefaultField (mbDefaultField <|> fromConfig config (.defaultField))
+        defaultField' <- parseDefaultField (defaultField <|> fromConfig config (.defaultField))
         withVty \vty -> do
           ch <- newBChan maxBound
           let withStream handle action = case reifyFormat (format <|> fromConfig config (.format)) input of
-                Json -> action (Json.jsonLinesReader defaultField handle)
+                Json -> action (Json.jsonLinesReader (prefix <|> fromConfig config (.prefix)) defaultField' handle)
                 Csv -> Csv.csvReader handle >>= action
           let withLogsHandle action = case input of
                 Stdin -> action stdin

@@ -20,10 +20,10 @@ import qualified Data.Text as Text
 import GHC.IO.IOMode (IOMode (ReadMode))
 import Options.Applicative
 import Options.Applicative.Common (runParser)
+import System.Directory (createDirectoryIfMissing)
 import System.IO
 import System.IO.Error
 import Widgets.LogView.Types (CopyMethod (..))
-import System.Directory (createDirectoryIfMissing)
 
 viewerArgs :: Parser AppArguments
 viewerArgs = do
@@ -45,7 +45,7 @@ viewerArgs = do
               \the first line is considered the header."
      in optional . option formatReader $ i
 
-  mbDefaultField <-
+  defaultField <-
     let i = long "default-field" <> short 'd' <> metavar "FIELD"
      in optional (strOption i)
 
@@ -65,6 +65,14 @@ viewerArgs = do
           "all" -> Just All
           _ -> Nothing
      in optional . option reader $ i
+
+  prefix <- 
+    let i = long "prefix" <> short 'p'
+        reader = maybeReader \case
+          "empty" -> Just Empty
+          "kube-tm" -> Just KubeTm
+          _ -> Nothing
+    in optional . option reader $ i
 
   pure $ AppArguments{..}
 

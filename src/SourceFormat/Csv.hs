@@ -35,6 +35,7 @@ csvReader handle = do
             let toLazy = Bytes.Lazy.fromStrict
             let utf8Str = J.String . Text.Encoding.decodeUtf8
             pure
+              . (Nothing,)
               . J.object
               $ zipWith
                 do \k v -> k J..= fromMaybe (utf8Str v) (decode $ toLazy v)

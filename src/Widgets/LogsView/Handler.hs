@@ -42,6 +42,8 @@ logsViewWidgetHandleEvent e = do
     NewLog l -> do
       B.zoom widgetState do
         B.zoom #allLogs (addLog l)
+        newLogsLen <- use $ #allLogs . to (.len)
+        when (isPowerOfTen newLogsLen) B.invalidateCache
         use #filterQueue >>= maybe (pure ()) (liftIO . atomically . flip writeTQueue l)
 
       use (widgetState . #activeLogs) >>= \case
@@ -343,3 +345,9 @@ changeTopLine :: (Ctx s) => Int -> B.EventM Name s ()
 changeTopLine i = do
   widgetState . #topLine .= i
   ?callbacks.topLineChanged i
+
+powersOfTen :: [Int]
+powersOfTen = iterate (* 10) 10
+
+isPowerOfTen :: Int -> Bool
+isPowerOfTen n = (== n) $ head $ dropWhile (< n) powersOfTen

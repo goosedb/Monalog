@@ -21,6 +21,13 @@ import Widgets.LogView.Types (CopyMethod)
 
 data Input = Stdin | File FilePath
 data Format = Json | Csv
+data Prefix = KubeTm | Empty
+
+instance FromJSON Prefix where
+  parseJSON = withText "Prefix" \case
+    "kube-tm" -> pure KubeTm
+    "empty" -> pure Empty
+    _ -> fail "Failed to parse prefix"
 
 instance FromJSON Format where
   parseJSON = withText "Format" \case
@@ -36,6 +43,7 @@ data AppConfig = AppConfig
   , fields :: Last [Text]
   , copyMethod :: Last CopyMethod
   , copyCommand :: Last String
+  , prefix :: Last Prefix
   }
   deriving (Generic, FromJSON)
 
@@ -47,10 +55,11 @@ instance Semigroup AppConfig where
       , fields = a.fields <> b.fields
       , copyMethod = a.copyMethod <> b.copyMethod
       , copyCommand = a.copyCommand <> b.copyCommand
+      , prefix = a.prefix <> b.prefix
       }
 
 instance Monoid AppConfig where
-  mempty = AppConfig empty empty empty empty empty
+  mempty = AppConfig empty empty empty empty empty empty
    where
     empty :: Last a
     empty = Last Nothing

@@ -4,6 +4,7 @@ import Control.Applicative (asum)
 import Control.Monad.Combinators.Expr
 import Data.Aeson (Value (..))
 import Data.Aeson.Key qualified as Key
+import Data.Functor (($>))
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Void (Void)
@@ -63,11 +64,10 @@ queryParser = hspace *> expr <* eof
           do (valueParser <* hspace) `sepBy` ("," >> hspace)
       ]
 
-  stringP = between "\"" "\"" (Text.concat <$> many (M.string "\\\"" <|> (Text.singleton <$> M.noneOf ['\"'])))
+  stringP = between "\"" "\"" (Text.concat <$> many ((M.string "\\\"" $> "\"") <|> (Text.singleton <$> M.noneOf ['\"'])))
 
   keyParser = Key.fromText <$> (simpleKey <|> ("$" *> stringP))
    where
     simpleKey = fmap Text.pack $ (:) <$> oneOf a1 <*> many (oneOf a2)
     a1 = '_' : ['a' .. 'z'] <> ['A' .. 'Z']
     a2 = a1 <> ['0' .. '9']
-
