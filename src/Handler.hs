@@ -263,8 +263,8 @@ handleEvent format config ch e = do
               , fields =
                   Last . Just $
                     fields <&> \selectedField -> case selectedField.field of
-                      Raw -> "raw"
-                      Timestamp -> "timestamp"
+                      Raw -> "@raw"
+                      Timestamp -> "@timestamp"
                       Field path -> drawPath path
               , copyMethod = config.copyMethod
               , copyCommand = config.copyCommand
