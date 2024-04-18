@@ -49,7 +49,7 @@ statusBarWidgetHandleEvent ch widgetState StatusBarWidgetCallbacks{..} = \case
         use (widgetState . #followLogs) >>= changeFollowLogs
     B.invalidateCache
   ActivateEditor -> B.zoom widgetState do
-    #isEditorActive .= False
+    #isEditorActive .= True
     #topLineEditor .= newEditor ""
   ResetFollow -> do
     widgetState . #followLogs .= False
