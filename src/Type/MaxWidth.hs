@@ -1,4 +1,5 @@
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE MonomorphismRestriction #-}
 
 module Type.MaxWidth where
 

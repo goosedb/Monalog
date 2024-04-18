@@ -3,9 +3,8 @@ module Widgets.StatusBar.Handler where
 import Brick qualified as B
 import Brick.BChan qualified as B
 import Brick.Widgets.Edit qualified as B
-import Control.Concurrent (forkIO, threadDelay)
+import Control.Concurrent (forkIO, threadDelay, myThreadId)
 import Control.Lens
-import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO (..))
 import Data.Char (isDigit)
 import Data.Generics.Labels ()
@@ -17,6 +16,7 @@ import Type.Event qualified as E
 import Type.LogViewPosition (LogViewPosition (..))
 import Type.Name
 import Widgets.StatusBar.Types
+import Data.Bool (bool)
 
 statusBarWidgetHandleEvent ::
   B.BChan E.Event ->
@@ -54,13 +54,15 @@ statusBarWidgetHandleEvent ch widgetState StatusBarWidgetCallbacks{..} = \case
   ResetFollow -> do
     widgetState . #followLogs .= False
   SetCopied -> do
-    scheduleStatusResetAfter2Seconds
-    widgetState . #status .= JustCopied
-  ResetStatus -> do
-    widgetState . #status .= Idle
+    threadId <- scheduleStatusResetAfter2Seconds
+    widgetState . #status .= JustCopied threadId
+  ResetStatus tId -> do
+    let setIdle = widgetState . #status .= Idle
+    use (widgetState . #status) >>= 
+      bool (pure ()) setIdle . (Just tId ==) . getStatusThreadId
   ConfigSaved -> do
-    scheduleStatusResetAfter2Seconds
-    widgetState . #status .= JustSavedConfig
+    threadId <- scheduleStatusResetAfter2Seconds
+    widgetState . #status .= JustSavedConfig threadId
   Key key mods -> do
     use (widgetState . #isEditorActive) >>= \case
       True -> case key of
@@ -78,9 +80,14 @@ statusBarWidgetHandleEvent ch widgetState StatusBarWidgetCallbacks{..} = \case
       False -> pure ()
  where
   scheduleStatusResetAfter2Seconds = do
-    void $ liftIO $ forkIO do
+    liftIO $ forkIO do
       threadDelay 2000000
-      B.writeBChan ch E.ResetCopied
+      myThreadId >>= B.writeBChan ch . E.ResetStatus
+
+  getStatusThreadId = \case
+    JustSavedConfig tid -> Just tid
+    JustCopied tid -> Just tid
+    Idle -> Nothing
 
 newEditor :: Text.Text -> B.Editor Text.Text Name
 newEditor = B.editorText (mkName StatusBarWidgetEditor) (Just 1)

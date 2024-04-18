@@ -71,7 +71,14 @@ logsViewWidgetHandleEvent e = do
       goToBottom
     CleanupLogs -> do
       defaultSelectedFields <- use $ widgetState . #defaultSelectedFields
-      widgetState . #selectedFields .= defaultSelectedFields
+      B.zoom widgetState do 
+        allLogs <- liftIO $ MVec.new 64
+        filteredLogs <- liftIO $ MVec.new 1
+        #selectedFields .= defaultSelectedFields
+        #allLogs .= MutableLogs allLogs 0
+        #filteredLogs .= MutableLogs filteredLogs 0
+        #visibleLogs .= ImmutableLogs mempty
+
       ?callbacks.topLineChanged initialTopLine
       ?callbacks.totalLinesChanged 0
       B.invalidateCache

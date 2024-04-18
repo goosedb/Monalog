@@ -26,8 +26,8 @@ statusBarWidgetDraw StatusBarWidget{..} =
         B.hBox
           [ case status of
               Idle -> B.emptyWidget
-              JustCopied -> B.txt "Copied!"
-              JustSavedConfig -> B.txt "Config saved!"
+              JustCopied {} -> B.txt "Copied!"
+              JustSavedConfig {} -> B.txt "Config saved!"
           , B.txt " "
           , B.hLimit (succ . sum . map Text.length . B.getEditContents $ topLineEditor) $
               B.renderEditor (B.hBox . map B.txt) isEditorActive topLineEditor

@@ -8,6 +8,7 @@ import GHC.Generics (Generic)
 import Graphics.Vty qualified as V
 import Type.LogViewPosition (LogViewPosition)
 import Type.Name
+import Control.Concurrent (ThreadId)
 
 data StatusBarWidget = StatusBarWidget
   { totalLines :: Int
@@ -22,8 +23,8 @@ data StatusBarWidget = StatusBarWidget
 
 data StatusBarStatus
   = Idle
-  | JustCopied
-  | JustSavedConfig
+  | JustCopied ThreadId
+  | JustSavedConfig ThreadId
 
 data StatusBarWidgetEvent
   = NewLog
@@ -33,7 +34,7 @@ data StatusBarWidgetEvent
   | Key V.Key [V.Modifier]
   | ResetFollow
   | SetCopied
-  | ResetStatus
+  | ResetStatus ThreadId
   | ActivateEditor
   | ConfigSaved
 

@@ -49,7 +49,7 @@ handleEvent format config ch e = do
         callLogsViewWidget (LogsView.NewLog l)
       FilteredLogs ls -> forM_ ls \l -> do
         callLogsViewWidget (LogsView.FilteredLog l)
-      ResetCopied -> callStatusBarWidget StatusBar.ResetStatus
+      ResetStatus tId -> callStatusBarWidget $ StatusBar.ResetStatus tId
     B.MouseDown (WidgetName name) V.BLeft _ loc' | ms == Up -> do
       absoluteLoc <- translateToAbsolute (WidgetName name) loc'
       let canClick = case activeWidget of
