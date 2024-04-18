@@ -2,6 +2,7 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedLabels #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeApplications #-}
 
@@ -66,13 +67,13 @@ viewerArgs = do
           _ -> Nothing
      in optional . option reader $ i
 
-  prefix <- 
+  prefix <-
     let i = long "prefix" <> short 'p'
         reader = maybeReader \case
           "empty" -> Just Empty
           "kube-tm" -> Just KubeTm
           _ -> Nothing
-    in optional . option reader $ i
+     in optional . option reader $ i
 
   pure $ AppArguments{..}
 
@@ -118,7 +119,7 @@ main =
         \case
           GetLocalConfigPath -> putStrLn configName
           GetGlobalConfigPath -> globalConfigDirPath >>= putStrLn . (<> configName)
-          CreateLocalConfig force -> createConfig force ""
+          CreateLocalConfig force -> createConfig force configName
           CreateGlobalConfig force -> globalConfigDirPath >>= createConfig force
       do app
 
@@ -135,31 +136,19 @@ copyMethodReader = maybeReader \case
 
 createConfig :: Bool -> FilePath -> IO ()
 createConfig force path = do
-  let filePath = path <> configName
-  doesConfigExist <- catch
-    do withFile filePath ReadMode (const (pure True))
-    do pure . not . isDoesNotExistErrorType . ioeGetErrorType
-  if not doesConfigExist || force
-    then do
-      createDirectoryIfMissing True path
-      bool appendFile writeFile doesConfigExist filePath $
-        unlines
-          [ "# Field in which invalid json will be written. Useful only for json format."
-          , "defaultField: \"message\""
-          , ""
-          , "# json / csv"
-          , "format: json"
-          , ""
-          , "# Fields selected by default"
-          , "fields:"
-          , "  - message"
-          , "  - severity"
-          , ""
-          , "# osc52 / native"
-          , "copyMethod: native"
-          , ""
-          , "# Command to copy with `native` copy method. Must take copied string from stdin"
-          , "copyCommand: null"
-          ]
-      putStrLn $ "Config created at " <> filePath
-    else putStrLn "Config already exists. To overwrite use --force"
+  result <-
+    dumpConfigTo
+      path
+      force
+      AppConfig
+        { defaultField = Last $ Just "message"
+        , fields = Last $ Just ["message", "severity"]
+        , format = Last $ Just Json
+        , copyMethod = Last $ Just Native
+        , copyCommand = Last Nothing
+        , prefix = Last Nothing
+        }
+  case result of
+    Left (Config.FileExists path) -> putStrLn $ "Error saving a config: file " <> path <> " exists. Use --force to overwrite."
+    Left (Config.UnexpectedError e) -> putStrLn $ "Error saving a config: " <> show e
+    Right _ -> putStrLn $ "Config created at " <> path <> configName

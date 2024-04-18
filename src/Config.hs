@@ -1,6 +1,6 @@
 module Config where
 
-import Control.Exception (catch)
+import Control.Exception (SomeException, catch, try)
 import Control.Monad ((>=>))
 import Data.Aeson (withText)
 import Data.ByteString qualified as Bytes
@@ -9,12 +9,13 @@ import Data.Maybe (fromMaybe)
 import Data.Monoid (Last (..))
 import Data.Text (Text)
 import Data.Text qualified as Text
-import Data.Yaml (decodeEither', prettyPrintParseException)
-import Data.Yaml.Aeson (FromJSON (parseJSON))
+import Data.Yaml (decodeEither', encodeFile, prettyPrintParseException)
+import Data.Yaml.Aeson (FromJSON (parseJSON), ToJSON (toJSON), Value (String))
 import GHC.Generics (Generic)
 import GHC.IO (throwIO)
 import System (System (..), currentOs)
 import System.Directory
+import System.FilePath
 import System.IO.Error
 import Type.Event (FatalError (..))
 import Widgets.LogView.Types (CopyMethod)
@@ -35,6 +36,18 @@ instance FromJSON Format where
     "json" -> pure Json
     _ -> fail "Failed to parse format"
 
+instance ToJSON Format where
+  toJSON =
+    String . \case
+      Csv -> "csv"
+      Json -> "json"
+
+instance ToJSON Prefix where
+  toJSON =
+    String . \case
+      KubeTm -> "kube-tm"
+      Empty -> "empty"
+
 data ConfigType = Local | Global | All
 
 data AppConfig = AppConfig
@@ -45,7 +58,7 @@ data AppConfig = AppConfig
   , copyCommand :: Last String
   , prefix :: Last Prefix
   }
-  deriving (Generic, FromJSON)
+  deriving (Generic, FromJSON, ToJSON)
 
 instance Semigroup AppConfig where
   a <> b =
@@ -64,7 +77,7 @@ instance Monoid AppConfig where
     empty :: Last a
     empty = Last Nothing
 
-loadConfig :: Maybe String -> Maybe ConfigType -> IO AppConfig
+loadConfig :: Maybe FilePath -> Maybe ConfigType -> IO AppConfig
 loadConfig userConfigPath = maybe
   do (<>) <$> loadGlobal <*> loadLocal
   do
@@ -92,6 +105,26 @@ loadConfig userConfigPath = maybe
       else throwIOError e
 
   throwIOError = throwFatalError . ioeGetErrorString
+
+data DumpError = FileExists FilePath | UnexpectedError Text
+
+-- | Dumps given config to local file path as yaml overriding existing
+dumpConfigToLocal :: AppConfig -> IO (Either DumpError ())
+dumpConfigToLocal = dumpConfigTo configName True
+
+-- | Dumps given config to given file path as yaml
+dumpConfigTo :: FilePath -> Bool -> AppConfig -> IO (Either DumpError ())
+dumpConfigTo path force config = do
+  result <- try @SomeException $ do
+    createDirectoryIfMissing True $ takeDirectory path
+    exists <- doesFileExist path
+    if not force && exists
+      then pure $ Left $ FileExists path
+      else Right <$> encodeFile path config
+  pure $ case result of
+    Left ex -> Left $ UnexpectedError $ Text.pack $ show ex
+    Right (Left e) -> Left e
+    Right _ -> Right ()
 
 globalPath :: IO FilePath
 globalPath = globalConfigDirPath <&> (<> configName)

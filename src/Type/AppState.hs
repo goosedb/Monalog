@@ -5,6 +5,7 @@ import Brick.Widgets.Edit qualified as B
 import Consts
 import Control.Lens
 import Data.Map.Strict qualified as Map
+import Data.Maybe (fromMaybe)
 import Data.String (IsString (..))
 import GHC.Generics
 import Type.Field (Field (..))
@@ -18,7 +19,7 @@ import Widgets.Fields.Types
 import Widgets.LogView.Types (CopyMethod, LogViewWidget, emptyLogWidget)
 import Widgets.LogsView.Types
 import Widgets.Query.Types
-import Widgets.StatusBar.Types (StatusBarWidget (..))
+import Widgets.StatusBar.Types (StatusBarStatus (..), StatusBarWidget (..))
 
 data MouseState = Up | Down N.Name B.Location
   deriving (Eq, Show)
@@ -48,7 +49,12 @@ initialState :: Maybe String -> Maybe CopyMethod -> Maybe [Field] -> IO AppState
 initialState copyCmd copyMethod defaultFields = do
   let defaultWidth = MaxWidth 1
   initialLogsView <- initLogsView (maybe [] (map (`SelectedField` defaultWidth)) defaultFields)
-  let fields = maybe initialFields (Map.fromList . map (,FieldState{isSelected = True, maxWidth = defaultWidth})) defaultFields
+  let fields =
+        flip Map.union initialFields
+          . Map.fromList
+          . map (,FieldState{isSelected = True, maxWidth = defaultWidth})
+          . fromMaybe mempty
+          $ defaultFields
   pure
     AppState
       { dialogWidget = Nothing
@@ -69,7 +75,7 @@ initialState copyCmd copyMethod defaultFields = do
             , topLine = initialTopLine
             , followLogs = initialFollowLogs
             , logViewPosition = LogViewPositionRight
-            , copied = False
+            , status = Idle
             }
       , fieldsView =
           FieldsWidget

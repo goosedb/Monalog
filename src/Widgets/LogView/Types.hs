@@ -2,7 +2,7 @@ module Widgets.LogView.Types where
 
 import Brick qualified as B
 import Brick.Widgets.Edit qualified as B
-import Data.Aeson (FromJSON (..), Value (..), withText)
+import Data.Aeson (FromJSON (..), ToJSON (..), Value (..), withText)
 import Data.Text (Text)
 import GHC.Exts (IsList (..))
 import GHC.Generics
@@ -31,6 +31,12 @@ instance FromJSON CopyMethod where
     "osc52" -> pure Osc52
     "native" -> pure Native
     _ -> fail "Failed to parse copy method"
+
+instance ToJSON CopyMethod where
+  toJSON =
+    String . \case
+      Osc52 -> "osc52"
+      Native -> "native"
 
 emptyLogWidget :: LogViewWidget
 emptyLogWidget =

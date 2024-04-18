@@ -16,9 +16,14 @@ data StatusBarWidget = StatusBarWidget
   , isEditorActive :: Bool
   , logViewPosition :: LogViewPosition
   , followLogs :: Bool
-  , copied :: Bool
+  , status :: StatusBarStatus
   }
   deriving (Generic)
+
+data StatusBarStatus
+  = Idle
+  | JustCopied
+  | JustSavedConfig
 
 data StatusBarWidgetEvent
   = NewLog
@@ -28,8 +33,9 @@ data StatusBarWidgetEvent
   | Key V.Key [V.Modifier]
   | ResetFollow
   | SetCopied
-  | ResetCopied
+  | ResetStatus
   | ActivateEditor
+  | ConfigSaved
 
 data StatusBarWidgetCallbacks s = StatusBarWidgetCallbacks
   { goToTop :: B.EventM Name s ()

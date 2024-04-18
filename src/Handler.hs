@@ -3,17 +3,19 @@ module Handler (handleEvent) where
 import Brick qualified as B
 import Brick.BChan qualified as B
 import Conduit (MonadIO (..))
+import Config
 import Control.Exception (throwIO)
 import Control.Lens
 import Control.Monad (forM_, when)
 import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromJust)
+import Data.Monoid (Last (..))
 import Graphics.Vty qualified as V
 import Type.AppState
 import Type.AppState qualified as AS
 import Type.Event
-import Type.Field (Field (..))
+import Type.Field (Field (..), drawPath)
 import Type.Name
 import Type.Name qualified as N
 import Widgets.Dialog.Handler qualified as Dialog
@@ -31,8 +33,8 @@ import Widgets.StatusBar.Handler qualified as StatusBar
 import Widgets.StatusBar.Types qualified as StatusBar
 import Widgets.Types (PackedLens' (PackedLens'))
 
-handleEvent :: B.BChan Event -> B.BrickEvent Name Event -> B.EventM Name AppState ()
-handleEvent ch e = do
+handleEvent :: Format -> AppConfig -> B.BChan Event -> B.BrickEvent Name Event -> B.EventM Name AppState ()
+handleEvent format config ch e = do
   ms <- use #mouseState
 
   activeWidget <- use #activeWidget
@@ -47,7 +49,7 @@ handleEvent ch e = do
         callLogsViewWidget (LogsView.NewLog l)
       FilteredLogs ls -> forM_ ls \l -> do
         callLogsViewWidget (LogsView.FilteredLog l)
-      ResetCopied -> callStatusBarWidget StatusBar.ResetCopied
+      ResetCopied -> callStatusBarWidget StatusBar.ResetStatus
     B.MouseDown (WidgetName name) V.BLeft _ loc' | ms == Up -> do
       absoluteLoc <- translateToAbsolute (WidgetName name) loc'
       let canClick = case activeWidget of
@@ -249,7 +251,26 @@ handleEvent ch e = do
               do \mw -> LogsView.SelectedField{width = mw, ..}
               do Map.lookup path paths
             _ -> f
-      , holdMouse = \n l -> #mouseState .= Down n l
+      , Fields.configSaved = \case
+          Fields.SavedSuccessfully -> callStatusBarWidget StatusBar.ConfigSaved
+          Fields.SaveErrorHappened err -> errorDialog $ "Error during saving of config: " <> err
+      , Fields.getConfig = do
+          fields <- use $ #logsView . #selectedFields
+          pure
+            AppConfig
+              { defaultField = config.defaultField
+              , format = Last $ Just format
+              , fields =
+                  Last . Just $
+                    fields <&> \selectedField -> case selectedField.field of
+                      Raw -> "@raw"
+                      Timestamp -> "@timestamp"
+                      Field path -> drawPath path
+              , copyMethod = config.copyMethod
+              , copyCommand = config.copyCommand
+              , prefix = config.prefix
+              }
+      , Fields.holdMouse = \n l -> #mouseState .= Down n l
       }
 
   activateLogsView = #activeWidget .= [AS.LogsWidgetName]
