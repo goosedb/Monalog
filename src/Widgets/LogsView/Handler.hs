@@ -49,7 +49,7 @@ logsViewWidgetHandleEvent e = do
       use (widgetState . #activeLogs) >>= \case
         All -> do
           addLogsToView
-          B.zoom widgetState getActiveLogs >>= ?callbacks.totalLinesChanged . (.len)
+          updateTotalLines
         _ -> pure ()
     FilteredLog l -> do
       B.zoom (widgetState . #filteredLogs) (addLog l)
@@ -57,7 +57,7 @@ logsViewWidgetHandleEvent e = do
       use (widgetState . #activeLogs) >>= \case
         Filtered -> do
           addLogsToView
-          B.zoom widgetState getActiveLogs >>= ?callbacks.totalLinesChanged . (.len)
+          updateTotalLines
         _ -> pure ()
     RunFilter ch q -> runFilter ch q
     ClearFilter -> clearFilter
@@ -172,7 +172,12 @@ clearFilter = do
     #activeLogs .= All
     updateVisibleLogs
 
+  updateTotalLines
+
   B.invalidateCache
+
+updateTotalLines :: (Ctx s) => B.EventM Name s ()
+updateTotalLines = B.zoom widgetState getActiveLogs >>= ?callbacks.totalLinesChanged . (.len)
 
 data GoTo = Line Int | Bottom | Top | Relative Int
 
