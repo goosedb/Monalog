@@ -21,6 +21,7 @@ import Type.TBool (TBool, pattern Is)
 import Widgets.Checkbox (drawCheckBox)
 import Widgets.LogView.Types
 import Widgets.Scrollbar.Vertical qualified as VScroll
+import qualified Data.ByteString as Bytes
 
 logViewWidgetDraw :: TBool "active" -> AvailableSpace -> LogViewWidget -> B.Widget Name
 logViewWidgetDraw isActive availableSpace LogViewWidget{..} = case selectedLog of
@@ -40,23 +41,14 @@ logViewWidgetDraw isActive availableSpace LogViewWidget{..} = case selectedLog o
         , B.withVScrollBarRenderer
             VScroll.renderer
             . B.withVScrollBars B.OnRight
-            . B.viewport (mkName LogViewWidgetViewport) B.Vertical
+            . B.viewport (mkName LogViewWidgetViewport) B.Both
             . B.cached (mkName LogViewWidgetItself)
             $ if showJsonpath
               then either
-                do B.vBox . map B.txtWrap . Text.lines
-                do
-                  \val ->
-                    let preparedSource = prepareSource val
-                     in B.vLimit (F.length preparedSource)
-                          . B.renderRawSource B.txt
-                          $ preparedSource
+                do B.vBox . map B.txt . Text.lines
+                do drawYaml
                 do jsonpathFilteredValue
-              else
-                let preparedSource = prepareSource value
-                 in B.vLimit (F.length preparedSource)
-                      . B.renderRawSource B.txt
-                      $ preparedSource
+              else drawYaml value
         , B.hBox
             [ B.clickable (mkName LogViewWidgetCopyLog) $ B.txt "[Copy]"
             , B.padLeft B.Max
@@ -68,13 +60,21 @@ logViewWidgetDraw isActive availableSpace LogViewWidget{..} = case selectedLog o
             ]
         ]
  where
-  source val =
+  
+  drawYaml value = 
+    let bytesValue = Yaml.encode (value :: Yaml.Value)
+        textValue = Text.Encode.decodeUtf8 bytesValue
+        doHighLight = Bytes.length bytesValue < 2048
+    in if doHighLight 
+        then let preparedSource = prepareSource textValue 
+             in B.vLimit (F.length preparedSource) $ B.renderRawSource B.txt preparedSource
+        else B.vBox . map B.txt . Text.lines $ textValue
+
+  source =
     either error id
       . S.tokenize (S.TokenizerConfig S.defaultSyntaxMap False) (S.defaultSyntaxMap Map.! "YAML")
-      . Text.Encode.decodeUtf8
-      $ Yaml.encode val
 
-  prepareSource val = concatMap
+  prepareSource txt = concatMap
     do
       reverse . map reverse . snd . F.foldl'
         do
@@ -86,4 +86,4 @@ logViewWidgetDraw isActive availableSpace LogViewWidget{..} = case selectedLog o
                      in (Text.length y, [(fst tok, y)] : (a & _head %~ ((fst tok, x) :)))
                   else (l + Text.length tokText, a & _head %~ (tok :))
         do (0 :: Int, [[]])
-    do source val
+    do source txt
