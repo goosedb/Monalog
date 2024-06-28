@@ -41,7 +41,7 @@ logViewWidgetDraw isActive availableSpace LogViewWidget{..} = case selectedLog o
         , B.withVScrollBarRenderer
             VScroll.renderer
             . B.withVScrollBars B.OnRight
-            . B.viewport (mkName LogViewWidgetViewport) B.Both
+            . B.viewport (mkName LogViewWidgetViewport) B.Vertical
             . B.cached (mkName LogViewWidgetItself)
             $ if showJsonpath
               then either
@@ -80,9 +80,10 @@ logViewWidgetDraw isActive availableSpace LogViewWidget{..} = case selectedLog o
         do
           \(l, a) tok ->
             let tokText = snd tok
-             in if Text.length tokText + l > availableSpace.width
+                maxWidth = availableSpace.width - 1
+             in if Text.length tokText + l > maxWidth
                   then
-                    let (x, y) = Text.splitAt (availableSpace.width - l) (snd tok)
+                    let (x, y) = Text.splitAt (maxWidth - l) (snd tok)
                      in (Text.length y, [(fst tok, y)] : (a & _head %~ ((fst tok, x) :)))
                   else (l + Text.length tokText, a & _head %~ (tok :))
         do (0 :: Int, [[]])
