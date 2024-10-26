@@ -6,13 +6,11 @@ import Brick.Widgets.Center qualified as B
 import Control.Lens
 import Data.Aeson (Value (..), encode)
 import Data.Aeson.Lens (key)
-import Data.ByteString.Lazy qualified as Bytes.Lazy
 import Data.Foldable qualified as F
 import Data.Generics.Labels ()
 import Data.List (intersperse)
 import Data.Scientific qualified as S
 import Data.Text qualified as Text
-import Data.Text.Encoding qualified as Text.Encoding
 import Data.Time.Format qualified as Time
 import Graphics.Vty qualified as V
 import Type.AvailableSpace
@@ -22,6 +20,8 @@ import Type.MaxWidth
 import Type.Name
 import Widgets.LogsView.Types
 import Widgets.Scrollbar.Horizontal qualified as HScroll
+import qualified Data.Text.Lazy.Encoding as Text.Lazy.Encoding
+import qualified Data.Text.Lazy as Text.Lazy
 
 logsViewWidgetDraw :: AvailableSpace -> LogsViewWidget -> B.Widget Name
 logsViewWidgetDraw availableSpace LogsViewWidget{..} = B.clickable (mkName LogsViewWidgetItself) $
@@ -96,7 +96,7 @@ logsViewWidgetDraw availableSpace LogsViewWidget{..} = B.clickable (mkName LogsV
         B.vBox $ map (const row) [1 .. availableSpace.height]
 
   logRow (i, l@Log{..}) =
-    let drawColumn field = drawLogsViewLogField field l B.<+> B.fill ' '
+    let drawColumn width field = drawLogsViewLogField width field l B.<+> B.fill ' '
         logNum = B.hLimit logNumberWidth $ B.str (" " <> show i) B.<+> B.fill ' '
         highlight = if ((.idx) . snd <$> selectedLog) == Just idx then B.modifyDefAttr (\V.Attr{..} -> V.Attr{attrStyle = V.SetTo V.reverseVideo, ..}) else id
         name = mkName $ LogsViewWidgetLogEntry (MkLineNumber i) idx
@@ -107,25 +107,26 @@ logsViewWidgetDraw availableSpace LogsViewWidget{..} = B.clickable (mkName LogsV
           . B.hBox
           $ logNum
             : B.vBorder
-            : intersperse B.vBorder (map (\FieldWidth{width, field} -> B.hLimit width (drawColumn field)) widths)
+            : intersperse B.vBorder (map (\FieldWidth{width, field} -> B.hLimit width (drawColumn width field)) widths)
 
   drawLogsViewColumnHeader = B.txt . drawLogsViewColumnHeaderTxt
 
-  drawLogsViewLogField field Log{..} = case field of
+  drawLogsViewLogField width field Log{..} = case field of
     Timestamp -> B.str $ Time.formatTime Time.defaultTimeLocale "%H:%M:%S" timestamp
-    Raw -> jsonWidget value
+    Raw -> jsonWidget width value
     Field path -> maybe
       do B.emptyWidget
-      do jsonWidget
+      do jsonWidget width
       do F.foldl' (\v k -> v >>= (^? key k)) (Just value) path
 
-  jsonWidget = \case
-    String t -> B.txt t
+  jsonWidget width = \case
+    String t -> B.txt (Text.take width t)
     Bool b -> B.str (show b)
     Number n
       | S.isInteger n -> B.str (show $ round @_ @Integer n)
       | otherwise -> B.str (show n)
-    v -> B.txt . Text.Encoding.decodeUtf8 . Bytes.Lazy.toStrict . encode $ v
+    v -> B.txt . Text.Lazy.toStrict . Text.Lazy.take (fromIntegral width) . Text.Lazy.Encoding.decodeUtf8 . encode $ v
+ -- v -> B.txt . Text.Encoding.decodeUtf8 . Bytes.Lazy.toStrict . encode $ v
 
 isFirstIndex :: Int -> Bool
 isFirstIndex = (== 0)

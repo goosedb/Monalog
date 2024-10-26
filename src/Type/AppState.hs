@@ -16,7 +16,7 @@ import Type.WidgetSize (WidgetSize (..))
 import Widgets.Dialog.Types (DialogWidget)
 import Widgets.Editor (emptyEditor)
 import Widgets.Fields.Types
-import Widgets.LogView.Types (CopyMethod, LogViewWidget, emptyLogWidget)
+import Widgets.LogView.Types (CopyMethod, LogViewWidget, LogViewWidgetSettings, emptyLogWidgetSettings)
 import Widgets.LogsView.Types
 import Widgets.Query.Types
 import Widgets.StatusBar.Types (StatusBarStatus (..), StatusBarWidget (..))
@@ -26,7 +26,7 @@ data MouseState = Up | Down N.Name B.Location
 
 data AppState = AppState
   { logsView :: LogsViewWidget
-  , logView :: LogViewWidget
+  , logView :: Either LogViewWidgetSettings LogViewWidget
   , statusBar :: StatusBarWidget
   , fieldsView :: FieldsWidget
   , queryView :: QueryWidget
@@ -60,9 +60,10 @@ initialState copyCmd copyMethod defaultFields = do
       { dialogWidget = Nothing
       , logsView = initialLogsView
       , logView =
-          emptyLogWidget
-            & #copyMethod %~ maybe id const copyMethod
-            & #nativeCopyCmd .~ copyCmd
+          Left $
+            emptyLogWidgetSettings
+              & #copyMethod %~ maybe id const copyMethod
+              & #nativeCopyCmd .~ copyCmd
       , statusBar =
           StatusBarWidget
             { totalLines = 0

@@ -25,6 +25,8 @@ import System.Directory (createDirectoryIfMissing)
 import System.IO
 import System.IO.Error
 import Widgets.LogView.Types (CopyMethod (..))
+import Data.Char (ord)
+import Text.Read (readMaybe)
 
 viewerArgs :: Parser AppArguments
 viewerArgs = do
@@ -42,7 +44,7 @@ viewerArgs = do
             <> short 'f'
             <> metavar "FORMAT"
             <> help
-              "Supported formats: json, csv. In the case of csv, \
+              "Supported formats: jsonl, csv. In the case of csv, \
               \the first line is considered the header."
      in optional . option formatReader $ i
 
@@ -58,8 +60,7 @@ viewerArgs = do
     let i =
           long "ignore-config"
             <> short 'i'
-            <> help "Makes monalog ignore config"
-            <> help "Expected values: global, local, all"
+            <> help "Makes monalog ignore config, expected values: global, local, all"
         reader = maybeReader \case
           "global" -> Just Global
           "local" -> Just Local
@@ -68,12 +69,23 @@ viewerArgs = do
      in optional . option reader $ i
 
   prefix <-
-    let i = long "prefix" <> short 'p'
+    let i = long "prefix" <> short 'p' <> help "Expects prefix before every line. Supported values: empty, kube-tm"
         reader = maybeReader \case
           "empty" -> Just Empty
           "kube-tm" -> Just KubeTm
           _ -> Nothing
      in optional . option reader $ i
+
+  csvDelimiter <- 
+    let i = long "delimiter" <> short 'd' <> help "comma, semicolon, or any 8-bit number"
+        comma = fromIntegral $ ord ','
+        semicolon = fromIntegral $ ord ';' 
+        reader = maybeReader \case
+          "comma" -> Just (fromIntegral $ ord ',')
+          "semicolon" -> Just (fromIntegral $ ord ';')
+          str | Just n <- readMaybe str -> Just n 
+          _ -> Nothing
+     in fmap (fromMaybe semicolon). optional . option reader $ i
 
   pure $ AppArguments{..}
 
@@ -125,7 +137,7 @@ main =
 
 formatReader :: ReadM Format
 formatReader = maybeReader \case
-  "json" -> Just Json
+  "json" -> Just Jsonl
   "csv" -> Just Csv
   _ -> Nothing
 
@@ -143,7 +155,7 @@ createConfig force path = do
       AppConfig
         { defaultField = Last $ Just "message"
         , fields = Last $ Just ["message", "severity"]
-        , format = Last $ Just Json
+        , format = Last $ Just Jsonl
         , copyMethod = Last $ Just Native
         , copyCommand = Last Nothing
         , prefix = Last Nothing

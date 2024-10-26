@@ -6,17 +6,18 @@ author:        goosedb
 maintainer:    goosedb@yandex.ru
 
 library
-  ghc-options:      -Wall
+  ghc-options:        -Wall
+
   -- cabal-fmt: expand src
   exposed-modules:
     App
+    AttrMap
     Buffer
     Config
     Consts
     Copy.Native
     Copy.Osc52
     Handler
-    Path
     Query
     Query.Eval
     Query.Parser
@@ -50,6 +51,7 @@ library
     Widgets.LogsView.Types
     Widgets.LogsView.Ui
     Widgets.LogView.Handler
+    Widgets.LogView.Tokenize
     Widgets.LogView.Types
     Widgets.LogView.Ui
     Widgets.Query.Handler
@@ -69,7 +71,6 @@ library
     , base
     , base64-bytestring
     , brick                >=2.2 && <3.0
-    , brick-skylighting
     , bytestring
     , cassava
     , conduit
@@ -77,7 +78,6 @@ library
     , directory
     , effectful
     , filepath
-    , fuzzy
     , generic-lens
     , jsonpath
     , lens
@@ -87,8 +87,6 @@ library
     , parser-combinators
     , resourcet-effectful
     , scientific
-    , skylighting
-    , skylighting-core
     , stm
     , text
     , text-zipper
@@ -137,12 +135,12 @@ executable monalog
   main-is:          Main.hs
   build-depends:
     , base
-    , lens
-    , text
     , directory
     , generic-lens
+    , lens
     , monalog
     , optparse-applicative
+    , text
 
   ghc-options:      -threaded -O2
   hs-source-dirs:   app

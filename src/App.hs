@@ -2,10 +2,10 @@
 
 module App where
 
+import AttrMap qualified
 import Brick qualified as B
 import Brick.BChan (newBChan, writeBChan)
 import Brick.BChan qualified as B
-import Brick.Widgets.Skylighting qualified as B
 import Buffer (Buffer (..), makeBuffer)
 import Conduit (MonadIO (..))
 import Config
@@ -33,7 +33,6 @@ import Effectful.State.Static.Local qualified as Eff
 import GHC.IO (catchException)
 import Graphics.Vty qualified as V
 import Handler (handleEvent)
-import Skylighting qualified as S
 import SourceFormat.Csv qualified as Csv
 import SourceFormat.Json qualified as Json
 import System.FilePath qualified as Path
@@ -43,11 +42,13 @@ import Type.Event
 import Type.Field
 import Type.Name
 import Ui (drawUi)
-import Vty (withVty)
+import Vty (makeVty)
+import Data.Word (Word8)
 
 data AppArguments = AppArguments
   { input :: Input
   , format :: Maybe Format
+  , csvDelimiter :: Word8
   , defaultField :: Maybe Text
   , configPath :: Maybe FilePath
   , ignoreConfig :: Maybe ConfigType
@@ -59,12 +60,12 @@ app AppArguments{..} = do
   let run = do
         config <- loadConfig configPath ignoreConfig
         defaultFieldParsed <- parseDefaultField (defaultField <|> fromConfig config (.defaultField))
-        withVty \vty -> do
+        makeVty input >>= \vty -> do
           ch <- newBChan maxBound
           let formatType = reifyFormat (format <|> fromConfig config (.format)) input
               withStream handle action = case formatType of
-                Json -> action (Json.jsonLinesReader (prefix <|> fromConfig config (.prefix)) defaultFieldParsed handle)
-                Csv -> Csv.csvReader handle >>= action
+                Jsonl -> action (Json.jsonLinesReader (prefix <|> fromConfig config (.prefix)) defaultFieldParsed handle)
+                Csv -> Csv.csvReader csvDelimiter handle >>= action
           let withLogsHandle action = case input of
                 Stdin -> action stdin
                 File path -> withFile path ReadMode action
@@ -100,13 +101,12 @@ app AppArguments{..} = do
                 do
                   void $ B.customMain
                     do vty
-                    do pure vty
+                    do makeVty input
                     do Just ch
                     do brickApp formatType config ch
                     do freshState
                 do
-                  V.shutdown vty
-                  killBuffer
+                  V.shutdown vty >> killBuffer
 
   run `catchException` \case MkFatalError e -> Text.IO.putStrLn e
  where
@@ -123,7 +123,7 @@ brickApp format config ch =
         vty <- B.getVtyHandle
         let output = V.outputIface vty
         liftIO $ V.setMode output V.Mouse True
-    , appAttrMap = const $ B.attrMap V.defAttr (B.attrMappingsForStyle S.pygments)
+    , appAttrMap = const AttrMap.yaml
     }
 
 reifyFormat :: Maybe Format -> Input -> Format
@@ -132,8 +132,8 @@ reifyFormat format input = case format of
   Nothing | File path <- input ->
     case Path.takeExtension path of
       ".csv" -> Csv
-      _ -> Json
-  _ -> Json
+      _ -> Jsonl
+  _ -> Jsonl
 
 parseDefaultField :: Maybe Text -> IO [Key.Key]
 parseDefaultField defaultField = maybe

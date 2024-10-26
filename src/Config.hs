@@ -21,7 +21,7 @@ import Type.Event (FatalError (..))
 import Widgets.LogView.Types (CopyMethod)
 
 data Input = Stdin | File FilePath
-data Format = Json | Csv
+data Format = Jsonl | Csv
 data Prefix = KubeTm | Empty
 
 instance FromJSON Prefix where
@@ -33,14 +33,14 @@ instance FromJSON Prefix where
 instance FromJSON Format where
   parseJSON = withText "Format" \case
     "csv" -> pure Csv
-    "json" -> pure Json
+    "jsonl" -> pure Jsonl
     _ -> fail "Failed to parse format"
 
 instance ToJSON Format where
   toJSON =
     String . \case
       Csv -> "csv"
-      Json -> "json"
+      Jsonl -> "jsonl"
 
 instance ToJSON Prefix where
   toJSON =

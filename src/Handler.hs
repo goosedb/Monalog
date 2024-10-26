@@ -4,18 +4,21 @@ import Brick qualified as B
 import Brick.BChan qualified as B
 import Conduit (MonadIO (..))
 import Config
-import Control.Exception (throwIO)
+import Control.Exception (throwIO, ErrorCall (ErrorCall))
 import Control.Lens
 import Control.Monad (forM_, when)
+import Data.Bool (bool)
+import Data.Either (fromRight, isRight)
 import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, isJust)
 import Data.Monoid (Last (..))
 import Graphics.Vty qualified as V
 import Type.AppState
 import Type.AppState qualified as AS
 import Type.Event
 import Type.Field (Field (..), drawPath)
+import Type.Log (Log (..))
 import Type.Name
 import Type.Name qualified as N
 import Widgets.Dialog.Handler qualified as Dialog
@@ -23,7 +26,7 @@ import Widgets.Dialog.Types qualified as Dialog
 import Widgets.Fields.Handler qualified as Fields
 import Widgets.Fields.Types qualified as Fields
 import Widgets.LogView.Handler qualified as LogView
-import Widgets.LogView.Types (LogViewWidget (LogViewWidget))
+import Widgets.LogView.Types (LogViewWidget (LogViewWidget), newLogView)
 import Widgets.LogView.Types qualified as LogView
 import Widgets.LogsView.Handler qualified as LogsView
 import Widgets.LogsView.Types qualified as LogsView
@@ -32,6 +35,8 @@ import Widgets.Query.Types qualified as Query
 import Widgets.StatusBar.Handler qualified as StatusBar
 import Widgets.StatusBar.Types qualified as StatusBar
 import Widgets.Types (PackedLens' (PackedLens'))
+import GHC.IO.Exception (IOErrorType(UserError))
+import Vty (suspendSignal)
 
 handleEvent :: Format -> AppConfig -> B.BChan Event -> B.BrickEvent Name Event -> B.EventM Name AppState ()
 handleEvent format config ch e = do
@@ -92,11 +97,12 @@ handleEvent format config ch e = do
     B.MouseUp{} -> #mouseState .= Up
     B.VtyEvent V.EvMouseUp{} -> #mouseState .= Up
     B.VtyEvent V.EvResize{} -> B.invalidateCache
-    B.VtyEvent (V.EvKey V.KEsc _) | LogViewWidget{selectedLog = Just _} <- logView -> do
+    B.VtyEvent (V.EvKey V.KEsc _) | Right LogViewWidget{settings} <- logView -> do
       B.invalidateCache
-      #logView . #selectedLog .= Nothing
+      #logView .= Left settings
     B.VtyEvent (V.EvKey (V.KChar 'd') [V.MCtrl]) -> B.halt
-    B.VtyEvent (V.EvKey (V.KChar 'q') [V.MCtrl]) ->
+    B.VtyEvent (V.EvKey (V.KChar 'z') [V.MCtrl]) -> suspend
+    B.VtyEvent (V.EvKey (V.KChar 'c') [V.MCtrl]) ->
       dialog
         "Confirm action"
         "Are you sure you want to cleanup logs?"
@@ -135,6 +141,8 @@ handleEvent format config ch e = do
         _ -> pure ()
       _ -> error "impossible!"
  where
+  suspend = B.suspendAndResume' suspendSignal
+
   translateToAbsolute name (B.Location (c, r)) = do
     B.Extent{extentUpperLeft = B.Location (ec, er)} <- fromJust <$> B.lookupExtent name
     mbViewport <- B.lookupViewport name
@@ -166,7 +174,7 @@ handleEvent format config ch e = do
     StatusBar.StatusBarWidget{..} <- use #statusBar
     LogView.logViewWidgetHandleEvent
       logViewPosition
-      #logView
+      (lens (either (error "illigal state") id . (.logView)) (\s v -> s{logView = Right v}))
       LogView.LogViewWidgetCallbacks
         { copied = callStatusBarWidget StatusBar.SetCopied
         , copyError = errorDialog
@@ -204,9 +212,13 @@ handleEvent format config ch e = do
             , selectedLogChanged = \_ -> pure ()
             , logAddedToView = callStatusBarWidget StatusBar.NewLog
             , selectedLog = \l -> do
-                B.invalidateCache
-                #logView . #selectedLog .= l
-                maybe (pure ()) (callLogViewWidget . LogView.LogSelected) l
+                logView <- use #logView
+                bool B.invalidateCache (pure ()) (isRight logView == isJust l)
+                let settings = either id (.settings) logView
+                maybe
+                  (#logView .= Left settings)
+                  (\Log{..} -> (#logView .= Right (newLogView value settings)) >> callLogViewWidget LogView.LogSelected)
+                  l
             , resetFollow = callStatusBarWidget StatusBar.ResetFollow
             , goToRequest = do
                 #activeWidget .= [AS.StatusBarWidgetName]
@@ -278,7 +290,8 @@ handleEvent format config ch e = do
   cleanupLogs = do
     callLogsViewWidget LogsView.CleanupLogs
     callFieldsWidget Fields.CleanupFields
-    #logView . #selectedLog .= Nothing
+    settings <- uses #logView (either id (.settings))
+    #logView .= Left settings
     closeDialog
 
   dialog title text actions selected = do

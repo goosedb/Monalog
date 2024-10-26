@@ -7,7 +7,6 @@ import Data.Aeson.Key qualified as Key
 import Data.Attoparsec.ByteString qualified as P
 import Data.ByteString qualified as Bytes
 import Data.ByteString.Lazy qualified as Bytes.Lazy
-import Data.Char (ord)
 import Data.Conduit qualified as C
 import Data.Conduit.Combinators qualified as C
 import Data.Csv.Parser qualified as Csv.Parser
@@ -23,8 +22,10 @@ import SourceFormat.Utils (packLog)
 import System.IO (Handle)
 import Type.Log (Log)
 
-csvReader :: (Eff.IOE :> es, Eff.State Int :> es) => Handle -> IO (C.ConduitT () Log (Eff es) ())
-csvReader handle = do
+type Delimiter = Word8
+
+csvReader :: (Eff.IOE :> es, Eff.State Int :> es) => Delimiter -> Handle -> IO (C.ConduitT () Log (Eff es) ())
+csvReader delim handle = do
   header <- Bytes.hGetLine handle >>= parseHeader delim
   pure $
     C.sourceHandle handle
@@ -48,8 +49,6 @@ csvReader handle = do
     do const (pure [])
     do pure
     do runParseCsv delim Csv.Parser.record i
-
-  delim = fromIntegral $ ord ','
 
 parseHeader :: Word8 -> Bytes.ByteString -> IO [Key.Key]
 parseHeader delim rawHeader = map (Key.fromText . Text.Encoding.decodeUtf8) <$> runParseHeader (rawHeader <> "\n")

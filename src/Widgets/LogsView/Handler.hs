@@ -71,7 +71,7 @@ logsViewWidgetHandleEvent e = do
       goToBottom
     CleanupLogs -> do
       defaultSelectedFields <- use $ widgetState . #defaultSelectedFields
-      B.zoom widgetState do 
+      B.zoom widgetState do
         allLogs <- liftIO $ MVec.new 64
         filteredLogs <- liftIO $ MVec.new 1
         #selectedFields .= defaultSelectedFields
@@ -212,36 +212,34 @@ goToTop :: (Ctx s) => B.EventM Name s ()
 goToTop =
   goTo Top
     >> B.invalidateCache
-    >> deselect
+    >> deselectLog
 
 goToBottom :: (Ctx s) => B.EventM Name s ()
 goToBottom =
   goTo Bottom
     >> B.invalidateCache
-    >> deselect
+    >> deselectLog
 
 handleKeyboardSelect :: (Ctx s) => LineNumber -> B.EventM Name s ()
 handleKeyboardSelect line =
   use (widgetState . #selectedLog) >>= maybe
     do selectByLine line
-    do uncurry deselectLog
+    do const deselectLog
 
 handleMouseSelect :: (Ctx s) => LineNumber -> B.EventM Name s ()
 handleMouseSelect line = do
   alreadySelected <- use (widgetState . #selectedLog)
   selecting <- B.zoom widgetState (getLineLog line)
   if ((.idx) . snd <$> alreadySelected) == ((.idx) <$> selecting)
-    then traverse_ (uncurry deselectLog) alreadySelected
+    then deselectLog
     else traverse_ (select line) selecting
 
-deselectLog :: (Ctx s) => LineNumber -> Log -> B.EventM Name s ()
-deselectLog ln l = do
-  B.invalidateCacheEntry (mkName $ LogsViewWidgetLogEntry ln l.idx)
-  widgetState . #selectedLog .= Nothing
-  ?callbacks.selectedLog Nothing
-
-deselect :: (Ctx s) => B.EventM Name s ()
-deselect = do
+deselectLog :: (Ctx s) => B.EventM Name s ()
+deselectLog = do
+  alreadySelected <- use (widgetState . #selectedLog)
+  case alreadySelected of
+    Just (ln, Log{idx}) -> B.invalidateCacheEntry (mkName $ LogsViewWidgetLogEntry ln idx)
+    Nothing -> pure ()
   widgetState . #selectedLog .= Nothing
   ?callbacks.selectedLog Nothing
 
@@ -272,12 +270,9 @@ getLogById idx = use (widgetState . #allLogs . #logs) >>= liftIO . ($ idx.rawIdx
 
 select :: (Ctx s) => LineNumber -> Log -> B.EventM Name s ()
 select lineNumber selectingLog = do
+  deselectLog
   widgetState . #selectedLog ?= (lineNumber, selectingLog)
   B.invalidateCacheEntry (mkName $ LogsViewWidgetLogEntry lineNumber selectingLog.idx)
-
-  use (widgetState . #selectedLog) >>= maybe (pure ()) \(ln, l) -> do
-    B.invalidateCacheEntry (mkName $ LogsViewWidgetLogEntry ln l.idx)
-
   ?callbacks.selectedLog (Just selectingLog)
 
 goTo :: forall s. (Ctx s) => GoTo -> B.EventM Name s ()

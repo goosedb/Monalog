@@ -3,88 +3,120 @@
 
 module Widgets.LogView.Ui where
 
+import Brick (clickable)
 import Brick qualified as B
 import Brick.Widgets.Edit qualified as B
-import Brick.Widgets.Skylighting qualified as B
-import Control.Lens
-import Data.Foldable qualified as F
+import Control.Lens (view)
+
+import Data.Bifunctor (Bifunctor (..))
+import Data.Foldable (Foldable (..))
 import Data.Generics.Labels ()
-import Data.Map.Strict qualified as Map
-import Data.Text qualified as Text
-import Data.Text.Encoding qualified as Text.Encode
-import Data.Yaml qualified as Yaml
-import Skylighting qualified as S
+import Data.Sequence qualified as Seq
 import Type.AvailableSpace
-import Type.Log
 import Type.Name
 import Type.TBool (TBool, pattern Is)
 import Widgets.Checkbox (drawCheckBox)
-import Widgets.LogView.Types
-import Widgets.Scrollbar.Vertical qualified as VScroll
-import qualified Data.ByteString as Bytes
+import Widgets.LogView.Tokenize (Token (..), TokenKind (..))
+import Widgets.LogView.Types (
+  CopyMethod (Native, Osc52),
+  LogViewWidget (..),
+  LogViewWidgetSettings (..),
+  generateCache,
+  mkName,
+ )
 
 logViewWidgetDraw :: TBool "active" -> AvailableSpace -> LogViewWidget -> B.Widget Name
-logViewWidgetDraw isActive availableSpace LogViewWidget{..} = case selectedLog of
-  Nothing -> B.emptyWidget
-  Just Log{..} ->
-    B.reportExtent (mkName LogViewWidgetItself)
-      . B.hLimit availableSpace.width
-      . B.vBox
-      $ [ B.hBox
-            [ drawCheckBox showJsonpath (mkName LogViewWidgetJsonpathCheckbox) "Jsonpath"
-            , B.txt ":"
-            , B.padLeftRight 1 $
-                B.hBox
-                  [ B.renderEditor (B.hBox . map B.txt) (Is == isActive) jsonPathEditor
-                  ]
-            ]
-        , B.withVScrollBarRenderer
-            VScroll.renderer
-            . B.withVScrollBars B.OnRight
-            . B.viewport (mkName LogViewWidgetViewport) B.Vertical
-            . B.cached (mkName LogViewWidgetItself)
-            $ if showJsonpath
-              then either
-                do B.vBox . map B.txt . Text.lines
-                do drawYaml
-                do jsonpathFilteredValue
-              else drawYaml value
-        , B.hBox
-            [ B.clickable (mkName LogViewWidgetCopyLog) $ B.txt "[Copy]"
-            , B.padLeft B.Max
-                . B.clickable (mkName LogViewWidgetCopyMethod)
-                . B.txt
-                $ case copyMethod of
-                  Osc52 -> "[Osc52]"
-                  Native -> "[Native]"
-            ]
-        ]
+logViewWidgetDraw isActive availableSpace LogViewWidget{..} =
+  let LogViewWidgetSettings{..} = settings
+   in B.reportExtent (mkName LogViewWidgetItself)
+        . B.clickable (mkName LogViewWidgetItself)
+        . B.hLimit availableSpace.width
+        . B.vBox
+        $ [ B.hBox
+              [ drawCheckBox showJsonpath (mkName LogViewWidgetJsonpathCheckbox) "Jsonpath"
+              , B.txt ":"
+              , B.padLeftRight 1 $
+                  B.hBox
+                    [ B.renderEditor (B.hBox . map B.txt) (Is == isActive) jsonPathEditor
+                    ]
+              ]
+          , B.padBottom B.Max
+              . clickable (mkName LogViewWidgetContent)
+              . B.cached (mkName LogViewWidgetContent)
+              $ B.Widget
+                { B.hSize = B.Greedy
+                , B.vSize = B.Greedy
+                , B.render = do
+                    w' <- view B.availWidthL
+                    h' <- view B.availHeightL
+                    let w = w' - 1
+                        withLength a = (a, either length length a)
+                        (content, contLen) = case cache of
+                          Just c -> (Right c, Seq.length c)
+                          Nothing ->
+                            withLength
+                              . second Seq.fromList
+                              . generateCache (if textWrap then Just w else Nothing) selectedLog jsonpathFilter
+                              $ showJsonpath
+                        d = fromIntegral @_ @Double
+                        shownPercent = d h' / d contLen
+                        offsetPercent = d offset / d contLen
+                        scrollSize = max 1 $ ceiling @_ @Int $ shownPercent * d h'
+                        offsetFize = max 0 $ min (h' - 1) $ ceiling @_ @Int $ offsetPercent * (d h' - d scrollSize)
+                    B.render $
+                      B.hBox
+                        [ B.reportExtent (mkName LogViewWidgetContent) $
+                            B.hLimit w $
+                              either
+                                do B.vBox . map B.txt
+                                do draw . Seq.take h' . Seq.drop offset 
+                                do content
+                        , B.padLeft B.Max . B.vBox $
+                            map
+                              ( \i ->
+                                  if i <= offsetFize
+                                    then B.txt " "
+                                    else
+                                      if i <= (scrollSize + offsetFize)
+                                        then B.clickable (mkName LogViewWidgetScrollBar) $ B.txt "|"
+                                        else B.txt " "
+                              )
+                              [1 .. h']
+                        ]
+                }
+          , B.hBox
+              [ B.clickable (mkName LogViewWidgetCopyLog) $ B.txt "[Copy]"
+              , B.padLeft B.Max $
+                  B.hBox
+                    [ B.clickable (mkName LogViewWidgetCopyMethod)
+                        . B.txt
+                        $ case copyMethod of
+                          Osc52 -> "[Osc52]"
+                          Native -> "[Native]"
+                    , B.clickable (mkName LogViewWidgetWordWrap)
+                        . B.txt
+                        $ "[Wrap: " <> if textWrap then "yes]" else " no]"
+                    ]
+              ]
+          ]
  where
-  
-  drawYaml value = 
-    let bytesValue = Yaml.encode (value :: Yaml.Value)
-        textValue = Text.Encode.decodeUtf8 bytesValue
-        doHighLight = Bytes.length bytesValue < 2048
-    in if doHighLight 
-        then let preparedSource = prepareSource textValue 
-             in B.vLimit (F.length preparedSource) $ B.renderRawSource B.txt preparedSource
-        else B.vBox . map B.txt . Text.lines $ textValue
-
-  source =
-    either error id
-      . S.tokenize (S.TokenizerConfig S.defaultSyntaxMap False) (S.defaultSyntaxMap Map.! "YAML")
-
-  prepareSource txt = concatMap
-    do
-      reverse . map reverse . snd . F.foldl'
-        do
-          \(l, a) tok ->
-            let tokText = snd tok
-                maxWidth = availableSpace.width - 1
-             in if Text.length tokText + l > maxWidth
-                  then
-                    let (x, y) = Text.splitAt (maxWidth - l) (snd tok)
-                     in (Text.length y, [(fst tok, y)] : (a & _head %~ ((fst tok, x) :)))
-                  else (l + Text.length tokText, a & _head %~ (tok :))
-        do (0 :: Int, [[]])
-    do source txt
+  draw =
+    let clickToCopy Token{..} = case kind of
+          Key -> clickable (mkName $ LogViewWidgetCopyKey jsonpath)
+          Bullet -> clickable (mkName $ LogViewWidgetCopyKey jsonpath)
+          _ -> id
+        colorize Token{..} =
+          B.withAttr
+            ( B.attrName "yaml" <> B.attrName case kind of
+                Normal -> "normal"
+                Key -> "key"
+                String -> "string"
+                Keyword -> "keyword"
+                Bullet -> "bullet"
+                Number -> "number"
+                Plus -> "plus"
+            )
+     in B.vBox
+          . map
+            (B.hBox . map (\t@Token{..} -> clickToCopy t . colorize t $ B.txt text))
+          . toList

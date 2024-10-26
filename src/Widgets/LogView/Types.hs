@@ -2,25 +2,41 @@ module Widgets.LogView.Types where
 
 import Brick qualified as B
 import Brick.Widgets.Edit qualified as B
+import Control.Lens (Bifunctor (..))
 import Data.Aeson (FromJSON (..), ToJSON (..), Value (..), withText)
+import Data.Bool (bool)
+import Data.JSONPath.Execute qualified as PE
+import Data.JSONPath.Types (JSONPathElement)
+import Data.JSONPath.Types qualified as PE
+import Data.Sequence (Seq)
 import Data.Text (Text)
 import GHC.Exts (IsList (..))
 import GHC.Generics
 import Graphics.Vty qualified as V
-import Type.Log (Log (..))
 import Type.Name
 import Type.WidgetSize (WidgetSize (Auto))
 import Widgets.Editor (emptyEditor)
+import Widgets.LogView.Tokenize (Token, prepare, tokenize, wrap, wrapText)
+
+data TokenizedValue = TokenizedValue {value :: Value, tokens :: [Maybe Token]}
 
 data LogViewWidget = LogViewWidget
-  { selectedLog :: Maybe Log
-  , jsonPathEditor :: B.Editor Text Name
+  { selectedLog :: TokenizedValue
+  , cache :: Maybe (Seq [Token])
+  , offset :: Int
+  , settings :: LogViewWidgetSettings
+  }
+  deriving (Generic)
+
+data LogViewWidgetSettings = LogViewWidgetSettings
+  { jsonPathEditor :: B.Editor Text Name
   , showJsonpath :: Bool
   , width :: WidgetSize
   , height :: WidgetSize
-  , jsonpathFilteredValue :: Either Text Value
+  , jsonpathFilter :: Either Text [JSONPathElement]
   , copyMethod :: CopyMethod
   , nativeCopyCmd :: Maybe String
+  , textWrap :: Bool
   }
   deriving (Generic)
 
@@ -38,21 +54,30 @@ instance ToJSON CopyMethod where
       Osc52 -> "osc52"
       Native -> "native"
 
-emptyLogWidget :: LogViewWidget
-emptyLogWidget =
+newLogView :: Value -> LogViewWidgetSettings -> LogViewWidget
+newLogView l settings =
   LogViewWidget
-    { selectedLog = Nothing
-    , jsonPathEditor = emptyEditor (mkName LogViewWidgetJsonpathEditor)
+    { selectedLog = TokenizedValue l (tokenize l)
+    , cache = Nothing
+    , offset = 0
+    , settings
+    }
+
+emptyLogWidgetSettings :: LogViewWidgetSettings
+emptyLogWidgetSettings =
+  LogViewWidgetSettings
+    { jsonPathEditor = emptyEditor (mkName LogViewWidgetJsonpathEditor)
     , showJsonpath = False
-    , jsonpathFilteredValue = Right (Array $ fromList [])
+    , jsonpathFilter = Right []
     , width = Auto
     , height = Auto
     , copyMethod = Osc52
     , nativeCopyCmd = Nothing
+    , textWrap = True
     }
 
 data LogViewWidgetEvent
-  = LogSelected Log
+  = LogSelected
   | Scroll Int
   | Click LogViewWidgetName B.Location B.Location
   | Move LogViewWidgetName B.Location B.Location
@@ -68,3 +93,24 @@ mkName = WidgetName . LogViewWidgetName
 
 jsonpathPrefix :: Text
 jsonpathPrefix = "$"
+
+extractByJsonPath :: Value -> [PE.JSONPathElement] -> Value
+extractByJsonPath value =
+  (\case [x] -> x; a -> Array $ fromList a)
+    . ($ value)
+    . PE.executeJSONPath
+
+tokenizeValue :: Value -> TokenizedValue
+tokenizeValue v = TokenizedValue v (tokenize v)
+
+generateCache :: Maybe Int -> TokenizedValue -> Either Text [JSONPathElement] -> Bool -> Either [Text] [[Token]]
+generateCache w selectedLog jsonpathFilter showJsonpath = bimap
+  do maybe pure wrapText w
+  do tokenizeAndWrap w
+  do bool (Right selectedLog) (tokenizeValue . extractByJsonPath selectedLog.value <$> jsonpathFilter) showJsonpath
+
+tokenizeAndWrap :: Maybe Int -> TokenizedValue -> [[Token]]
+tokenizeAndWrap w =
+  prepare
+    . maybe id wrap w
+    . tokens

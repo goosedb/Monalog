@@ -66,11 +66,14 @@ data DialogWidgetName
   deriving (Eq, Ord, Show)
 
 data LogViewWidgetName
-  = LogViewWidgetViewport
-  | LogViewWidgetCopyLog
+  = LogViewWidgetCopyLog
+  | LogViewWidgetScrollBar
   | LogViewWidgetCopyMethod
+  | LogViewWidgetWordWrap
   | LogViewWidgetJsonpathEditor
   | LogViewWidgetJsonpathCheckbox
   | LogViewWidgetItself
+  | LogViewWidgetContent
+  | LogViewWidgetCopyKey [Text]
   | LogViewWidgetBorder
   deriving (Eq, Ord, Show)

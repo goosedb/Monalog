@@ -14,7 +14,7 @@ import Type.WidgetSize (WidgetSize (..))
 import Widgets.Dialog.Ui (dialogWidgetDraw)
 import Widgets.Fields.Types
 import Widgets.Fields.Ui (fieldsWidgetDraw)
-import Widgets.LogView.Types (LogViewWidget (..))
+import Widgets.LogView.Types (LogViewWidget (..), LogViewWidgetSettings (..))
 import Widgets.LogView.Ui (logViewWidgetDraw)
 import Widgets.LogsView.Ui (logsViewWidgetDraw)
 import Widgets.Query.Ui (queryWidgetDraw)
@@ -26,8 +26,7 @@ drawUi AS.AppState{..} =
   [ case activeWidget of
       (AS.DialogWidgetName : _) -> maybe B.emptyWidget dialogWidgetDraw dialogWidget
       _ -> B.emptyWidget
-  , B.joinBorders
-      . sortExtents
+  , sortExtents
       . B.border
       . B.vBox
       $ [ B.padLeftRight 1 (queryWidgetDraw isQueryWidgetActive queryView)
@@ -47,7 +46,7 @@ drawUi AS.AppState{..} =
                     B.render case statusBar.logViewPosition of
                       LogViewPositionBottom ->
                         let availableForLogsView = case logView of
-                              LogViewWidget{selectedLog = Just _, height} -> case height of
+                              Right LogViewWidget{settings = LogViewWidgetSettings{height}} -> case height of
                                 Auto -> h' `div` 2
                                 Manual i -> h' - i
                               _ -> h'
@@ -59,7 +58,7 @@ drawUi AS.AppState{..} =
                       LogViewPositionRight ->
                         let availableForLogView = w' - availableForLogsView
                             availableForLogsView = case logView of
-                              LogViewWidget{selectedLog = Just _, width} -> case width of
+                              Right LogViewWidget{settings = LogViewWidgetSettings{width}} -> case width of
                                 Auto -> (w' `div` 3) * 2
                                 Manual i -> w' - i
                               _ -> w'
@@ -103,13 +102,14 @@ drawUi AS.AppState{..} =
   drawLogsViewCluster box sep logsViewSpace logViewSpace =
     box
       [ drawLogsViewStatusBar logsViewSpace
-      , case logView of
-          LogViewWidget{selectedLog = Just _} ->
-            box
-              [ B.clickable (WidgetName $ LogViewWidgetName LogViewWidgetBorder) sep
-              , drawLogView logViewSpace logView
-              ]
-          _ -> B.emptyWidget
+      , let name = WidgetName . LogViewWidgetName
+         in case logView of
+              Right w ->
+                box
+                  [ B.clickable (name LogViewWidgetBorder) sep
+                  , drawLogView logViewSpace w
+                  ]
+              _ -> B.emptyWidget
       ]
 
   drawLogsViewStatusBar logsViewSpace =

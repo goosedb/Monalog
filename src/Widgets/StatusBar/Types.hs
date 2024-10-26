@@ -2,13 +2,13 @@ module Widgets.StatusBar.Types where
 
 import Brick qualified as B
 import Brick.Widgets.Edit qualified as B
+import Control.Concurrent (ThreadId)
 import Data.Generics.Labels ()
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import Graphics.Vty qualified as V
 import Type.LogViewPosition (LogViewPosition)
 import Type.Name
-import Control.Concurrent (ThreadId)
 
 data StatusBarWidget = StatusBarWidget
   { totalLines :: Int

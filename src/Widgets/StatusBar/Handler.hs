@@ -3,9 +3,10 @@ module Widgets.StatusBar.Handler where
 import Brick qualified as B
 import Brick.BChan qualified as B
 import Brick.Widgets.Edit qualified as B
-import Control.Concurrent (forkIO, threadDelay, myThreadId)
+import Control.Concurrent (forkIO, myThreadId, threadDelay)
 import Control.Lens
 import Control.Monad.IO.Class (MonadIO (..))
+import Data.Bool (bool)
 import Data.Char (isDigit)
 import Data.Generics.Labels ()
 import Data.Maybe (fromMaybe)
@@ -16,7 +17,6 @@ import Type.Event qualified as E
 import Type.LogViewPosition (LogViewPosition (..))
 import Type.Name
 import Widgets.StatusBar.Types
-import Data.Bool (bool)
 
 statusBarWidgetHandleEvent ::
   B.BChan E.Event ->
@@ -58,8 +58,8 @@ statusBarWidgetHandleEvent ch widgetState StatusBarWidgetCallbacks{..} = \case
     widgetState . #status .= JustCopied threadId
   ResetStatus tId -> do
     let setIdle = widgetState . #status .= Idle
-    use (widgetState . #status) >>= 
-      bool (pure ()) setIdle . (Just tId ==) . getStatusThreadId
+    use (widgetState . #status)
+      >>= bool (pure ()) setIdle . (Just tId ==) . getStatusThreadId
   ConfigSaved -> do
     threadId <- scheduleStatusResetAfter2Seconds
     widgetState . #status .= JustSavedConfig threadId

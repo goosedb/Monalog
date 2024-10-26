@@ -1,10 +1,12 @@
 module Query.Eval where
 
-import Data.Aeson (Value (..))
+import Control.Lens
+import Data.Aeson
+import Data.Aeson.Lens (key)
 import Data.Foldable qualified as F
-import Path (getByPath)
+import Data.Maybe (fromMaybe)
+import Data.Text qualified as Text
 import Query (Query (..))
-import Text.Fuzzy qualified as Fuzzy
 
 data QueryResult = BoolResult Bool | ValueResult Value
   deriving (Show)
@@ -24,7 +26,7 @@ evalQuery v = go
     Path path -> ValueResult (getByPath path v)
     Value val -> ValueResult val
     Like l r -> BoolResult case (go l, go r) of
-      (ValueResult (String ls), ValueResult (String lr)) -> Fuzzy.test lr ls
+      (ValueResult (String ls), ValueResult (String lr)) -> lr `Text.isInfixOf` ls
       _ -> False
     In a as -> case (toValue (go a), toArray (go as)) of
       (a', as') -> BoolResult $ elem a' as'
@@ -47,3 +49,6 @@ toBool = \case
   BoolResult b -> b
   ValueResult (Bool b) -> b
   ValueResult _ -> False
+
+getByPath :: (Foldable t) => t Key -> Value -> Value
+getByPath path val = fromMaybe Null $ F.foldl' (\v k -> v >>= (^? key k)) (Just val) path
