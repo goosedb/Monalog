@@ -82,6 +82,9 @@ fieldsWidgetHandleEvent widgetState cb@FieldsWidgetCallbacks{..} = \case
     B.invalidateCache
   _ -> pure ()
 
+data FieldState = NotUpdated | Updated | Created
+  deriving (Eq)
+
 handleNewLog :: Lens' s FieldsWidget -> FieldsWidgetCallbacks s -> Log -> B.EventM Name s ()
 handleNewLog widgetState FieldsWidgetCallbacks{..} l = do
   let valueKeys = keys l.value
@@ -89,20 +92,25 @@ handleNewLog widgetState FieldsWidgetCallbacks{..} l = do
   let updateField path mw fieldsMap = Map.alterF
         do
           maybe
-            do (False, Just FieldState{isSelected = False, maxWidth = mw})
-            do \FieldState{..} -> (mw > maxWidth, Just FieldState{maxWidth = max mw maxWidth, ..})
+            do (Created, Just FieldState{isSelected = False, maxWidth = mw})
+            do \FieldState{..} -> (if mw > maxWidth then Updated else NotUpdated, Just FieldState{maxWidth = max mw maxWidth, ..})
         do Field path
         do fieldsMap
-  let (updatedPaths, updatedFields) = F.foldl'
+  let (updatedPaths, createdPaths, updatedFields) = F.foldl'
         do
-          \(updFields, fieldsMap) (path, mw) ->
-            let (isFieldWidthUpdated, updatedFieldsMap) = updateField path mw fieldsMap
-             in (if isFieldWidthUpdated then (path, mw) : updFields else updFields, updatedFieldsMap)
-        do ([], fields)
+          \(updFields, createdFields, fieldsMap) (path, mw) ->
+            let (fieldState, updatedFieldsMap) = updateField path mw fieldsMap
+             in ( if fieldState == Updated then (path, mw) : updFields else updFields
+                , if fieldState == Created then path : createdFields else createdFields
+                , updatedFieldsMap
+                )
+        do ([], [], fields)
         do valueKeys
   widgetState . #fields .= updatedFields
   unless (null updatedPaths) do
     fieldsChangedMaxSize (Map.fromList updatedPaths)
+  unless (null createdPaths) do
+    fieldsCreated createdPaths
 
 keys :: Value -> [(Path, MaxWidth)]
 keys (Object o) = concatMap (\(k, v) -> map (first (k :)) $ keys v) (KeyMap.toList o)

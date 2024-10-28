@@ -13,6 +13,7 @@ import Data.Text (Text)
 import GHC.Exts (IsList (..))
 import GHC.Generics
 import Graphics.Vty qualified as V
+import Type.Field (Path)
 import Type.Name
 import Type.WidgetSize (WidgetSize (Auto))
 import Widgets.Editor (emptyEditor)
@@ -86,13 +87,11 @@ data LogViewWidgetEvent
 data LogViewWidgetCallbacks s = LogViewWidgetCallbacks
   { copied :: B.EventM Name s ()
   , copyError :: Text -> B.EventM Name s ()
+  , addFilter :: [Text] -> Value -> B.EventM Name s ()
   }
 
 mkName :: LogViewWidgetName -> Name
 mkName = WidgetName . LogViewWidgetName
-
-jsonpathPrefix :: Text
-jsonpathPrefix = "$"
 
 extractByJsonPath :: Value -> [PE.JSONPathElement] -> Value
 extractByJsonPath value =

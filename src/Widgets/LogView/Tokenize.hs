@@ -11,6 +11,7 @@ import GHC.IsList (IsList (..))
 
 data Token = Token
   { jsonpath :: [Text.Text]
+  , keys :: [Text.Text]
   , text :: Text.Text
   , kind :: TokenKind
   }
@@ -55,22 +56,23 @@ wrap maxWidth = go maxWidth
           else Just t : go (rest - txtLen) ts
 
 tokenize :: J.Value -> [Maybe Token]
-tokenize = go ["$"] 0 []
+tokenize = go ["$"] [] 0 []
  where
   isAtom = \case
     J.Object _ -> False
     J.Array _ -> False
     _ -> True
 
-  go jpath indent inside = \case
+  go jpath keys indent inside = \case
     J.Object obj -> case KeyMap.toList obj of
       kv : kvs ->
         let
           drawKV (Key.toText -> k, v) =
             let jpath' = jpath <> ["." <> k]
-                tok' t kind = Just $ Token jpath' t kind
-                plus = if isAtom v && InsideArray `notElem` inside then (tok' "+ " Plus :) else id
-             in plus $ tok' k Key : tok' ": " Normal : go jpath' (indent + 2) (InsideObject : inside) v
+                keys' = keys <> [k]
+                tok' t kind = Just $ Token jpath' keys' t kind
+                plus = if isAtom v && InsideArray `notElem` inside then (tok' "+ " Plus :) else (tok' "  " Normal :)
+             in plus $ tok' k Key : tok' ": " Normal : go jpath' keys' (indent + 2) (InsideObject : inside) v
           tabluated = (tok (Text.pack $ replicate indent ' ') Normal :)
           drawnFirst = case inside of
             InsideObject : _ -> newline : tabluated (drawKV kv)
@@ -83,8 +85,8 @@ tokenize = go ["$"] 0 []
         let
           drawIV (Text.pack . show -> i, v) =
             let jpath' = jpath <> ["[" <> i <> "]"]
-                tok' t kind = Just $ Token jpath' t kind
-             in tok' "-" Bullet : tok' " " Normal : go jpath' (indent + 2) (InsideArray : inside) v
+                tok' t kind = Just $ Token jpath' keys t kind
+             in tok' "  " Normal : tok' "-" Bullet : tok' " " Normal : go jpath' keys (indent + 2) (InsideArray : inside) v
           tabluated = (tok (Text.pack $ replicate indent ' ') Normal :)
           drawnFirst = case inside of
             InsideArray : _ -> drawIV iv
@@ -102,7 +104,7 @@ tokenize = go ["$"] 0 []
     J.Bool b -> atom (bool "false" "true" b) Keyword
     J.Null -> atom "null" Keyword
    where
-    tok t k = Just $ Token jpath t k
+    tok t k = Just $ Token jpath keys t k
     newline = Nothing
     atom t k = [tok t k, newline]
     scientific = Text.pack . either show show . floatingOrInteger @Double @Integer

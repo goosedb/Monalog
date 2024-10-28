@@ -14,7 +14,7 @@ drawLogsViewColumnHeaderTxt :: Field -> Text.Text
 drawLogsViewColumnHeaderTxt = \case
   Timestamp -> "@timestamp"
   Raw -> "@raw"
-  Field path -> drawPath path
+  Field path -> textPath path
 
-drawPath :: [JK.Key] -> Text.Text
-drawPath = Text.intercalate "." . map JK.toText
+textPath :: [JK.Key] -> Text.Text
+textPath = Text.intercalate "." . map JK.toText

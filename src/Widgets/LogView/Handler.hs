@@ -12,12 +12,14 @@ import Copy.Osc52 qualified as Osc52
 import Data.Aeson (encode)
 import Data.Aeson.Types (Value (..))
 import Data.Bifunctor (Bifunctor (..))
+import Data.Function (on)
 import Data.Generics.Labels ()
 import Data.JSONPath.Execute qualified as PE
 import Data.JSONPath.Parser qualified as JP
 import Data.Maybe (fromJust)
 import Data.Sequence qualified as Seq
 import Data.Text qualified as Text
+import Data.Text.IO qualified
 import GHC.Exts (IsList (..))
 import Graphics.Vty qualified as V
 import Text.Megaparsec qualified as M
@@ -29,14 +31,13 @@ import Widgets.LogView.Tokenize (Token (..), TokenKind (Normal))
 import Widgets.LogView.Types (
   CopyMethod (Native, Osc52),
   LogViewWidget (..),
-  LogViewWidgetCallbacks (copied, copyError),
+  LogViewWidgetCallbacks (..),
   LogViewWidgetEvent (..),
   LogViewWidgetSettings (..),
   TokenizedValue (TokenizedValue, tokens, value),
   generateCache,
   mkName,
  )
-import Data.Function (on)
 
 logViewWidgetHandleEvent :: LogViewPosition -> Lens' s LogViewWidget -> LogViewWidgetCallbacks s -> LogViewWidgetEvent -> B.EventM Name s ()
 logViewWidgetHandleEvent logViewPosition widgetState callbacks = \case
@@ -77,7 +78,7 @@ logViewWidgetHandleEvent logViewPosition widgetState callbacks = \case
       updateFilter >> updateCache
     LogViewWidgetCopyLog -> do
       LogViewWidget{..} <- use widgetState
-      let LogViewWidgetSettings {..} = settings
+      let LogViewWidgetSettings{..} = settings
       if showJsonpath
         then either (const $ pure ()) (copy . extactValue selectedLog.value) jsonpathFilter
         else copy selectedLog.value
@@ -90,21 +91,26 @@ logViewWidgetHandleEvent logViewPosition widgetState callbacks = \case
       let d = fromIntegral @_ @Double
       widgetState . #settings . #textWrap %= not
       offsetPercentage <- do
-        LogViewWidget {..} <- use widgetState
+        LogViewWidget{..} <- use widgetState
         pure $ ((/) `on` d) offset (maybe 1 Seq.length cache)
       B.invalidateCacheEntry (mkName LogViewWidgetContent) >> updateCache
       newLength <- do
-        LogViewWidget {..} <- use widgetState
+        LogViewWidget{..} <- use widgetState
         pure $ maybe 1 (d . Seq.length) cache
       widgetState . #offset .= round (newLength * offsetPercentage)
     LogViewWidgetCopyKey path -> do
       LogViewWidget{..} <- use widgetState
-      let rawPath = Text.concat path
       let valueToCopy = do
-            parsedPath <- either (const Nothing) Just $ parseJsonPath rawPath
+            parsedPath <- mkJPath (Text.concat path)
             let TokenizedValue{..} = selectedLog
             pure $ extactValue value parsedPath
       maybe (pure ()) copy valueToCopy
+    LogViewWidgetFilterValue path -> do
+      LogViewWidget{..} <- use widgetState
+      let TokenizedValue{..} = selectedLog
+      let mbVal = extactValue value <$> mkJPath ("$." <> Text.intercalate "." path)
+      liftIO $ Data.Text.IO.appendFile "log.log" ("$." <> Text.intercalate "." path <> "\n")
+      maybe (pure ()) (callbacks.addFilter path) mbVal
     _ -> pure ()
   Key k mods -> do
     B.zoom (widgetState . #settings . #jsonPathEditor) do
@@ -112,6 +118,8 @@ logViewWidgetHandleEvent logViewPosition widgetState callbacks = \case
     updateFilter
     B.invalidateCacheEntry (mkName LogViewWidgetContent)
  where
+  mkJPath = either (const Nothing) Just . parseJsonPath
+
   contentExtent = do
     B.Extent{extentSize = (c, r)} <-
       fromJust <$> B.lookupExtent (mkName LogViewWidgetContent)
@@ -129,7 +137,7 @@ logViewWidgetHandleEvent logViewPosition widgetState callbacks = \case
     let LogViewWidgetSettings{..} = settings
     let newCache =
           either
-            do Seq.fromList . map (\t -> [Token [] t Normal])
+            do Seq.fromList . map (\t -> [Token [] [] t Normal])
             do id
             do second Seq.fromList $ generateCache (if textWrap then Just c else Nothing) selectedLog jsonpathFilter showJsonpath
     widgetState . #cache ?= newCache

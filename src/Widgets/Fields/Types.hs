@@ -32,6 +32,7 @@ data ConfigSavingResult = SavedSuccessfully | SaveErrorHappened Text
 
 data FieldsWidgetCallbacks s = FieldsWidgetCallbacks
   { fieldSelected :: MaxWidth -> Field -> B.EventM Name s ()
+  , fieldsCreated :: [Path] -> B.EventM Name s ()
   , fieldUnselected :: Field -> B.EventM Name s ()
   , fieldsChangedMaxSize :: Map.Map Path MaxWidth -> B.EventM Name s ()
   , holdMouse :: Name -> B.Location -> B.EventM Name s ()

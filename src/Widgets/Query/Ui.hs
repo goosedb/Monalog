@@ -14,7 +14,7 @@ queryWidgetDraw isActive QueryWidget{..} =
   B.reportExtent queryWidgetName $
     B.hBox
       [ B.txt "Query: "
-      , B.renderEditor (B.txt . Text.concat) (isActive == Is) input
+      , B.reportExtent (mkName QueryWidgetEditor) $ B.renderEditor (B.txt . Text.concat) (isActive == Is) input
       , case parseError of
           Just _ -> B.clickable (mkName QueryWidgetErrorHint) $ B.txt "[!]"
           Nothing -> B.emptyWidget

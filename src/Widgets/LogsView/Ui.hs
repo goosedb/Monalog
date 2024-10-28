@@ -11,6 +11,8 @@ import Data.Generics.Labels ()
 import Data.List (intersperse)
 import Data.Scientific qualified as S
 import Data.Text qualified as Text
+import Data.Text.Lazy qualified as Text.Lazy
+import Data.Text.Lazy.Encoding qualified as Text.Lazy.Encoding
 import Data.Time.Format qualified as Time
 import Graphics.Vty qualified as V
 import Type.AvailableSpace
@@ -20,8 +22,6 @@ import Type.MaxWidth
 import Type.Name
 import Widgets.LogsView.Types
 import Widgets.Scrollbar.Horizontal qualified as HScroll
-import qualified Data.Text.Lazy.Encoding as Text.Lazy.Encoding
-import qualified Data.Text.Lazy as Text.Lazy
 
 logsViewWidgetDraw :: AvailableSpace -> LogsViewWidget -> B.Widget Name
 logsViewWidgetDraw availableSpace LogsViewWidget{..} = B.clickable (mkName LogsViewWidgetItself) $
@@ -126,7 +126,8 @@ logsViewWidgetDraw availableSpace LogsViewWidget{..} = B.clickable (mkName LogsV
       | S.isInteger n -> B.str (show $ round @_ @Integer n)
       | otherwise -> B.str (show n)
     v -> B.txt . Text.Lazy.toStrict . Text.Lazy.take (fromIntegral width) . Text.Lazy.Encoding.decodeUtf8 . encode $ v
- -- v -> B.txt . Text.Encoding.decodeUtf8 . Bytes.Lazy.toStrict . encode $ v
+
+-- v -> B.txt . Text.Encoding.decodeUtf8 . Bytes.Lazy.toStrict . encode $ v
 
 isFirstIndex :: Int -> Bool
 isFirstIndex = (== 0)

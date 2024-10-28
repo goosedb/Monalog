@@ -3,8 +3,9 @@
 module Type.Name where
 
 import Brick.Types qualified as B
+import Data.Aeson (Value)
 import Data.Text (Text)
-import Type.Field (Field)
+import Type.Field (Field, Path)
 import Type.Log (Idx)
 
 newtype Name
@@ -75,5 +76,6 @@ data LogViewWidgetName
   | LogViewWidgetItself
   | LogViewWidgetContent
   | LogViewWidgetCopyKey [Text]
+  | LogViewWidgetFilterValue [Text]
   | LogViewWidgetBorder
   deriving (Eq, Ord, Show)

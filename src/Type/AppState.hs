@@ -89,6 +89,8 @@ initialState copyCmd copyMethod defaultFields = do
           QueryWidget
             { input = emptyEditor (N.WidgetName $ N.QueryWidgetName N.QueryWidgetEditor)
             , parseError = Nothing
+            , fields = []
+            , hint = Nothing
             }
       , mouseState = Up
       , activeWidget = [LogsWidgetName]

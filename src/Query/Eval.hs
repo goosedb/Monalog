@@ -6,7 +6,7 @@ import Data.Aeson.Lens (key)
 import Data.Foldable qualified as F
 import Data.Maybe (fromMaybe)
 import Data.Text qualified as Text
-import Query (Query (..))
+import Query (Located (..), Query (..))
 
 data QueryResult = BoolResult Bool | ValueResult Value
   deriving (Show)
@@ -23,7 +23,7 @@ evalQuery v = go
       (BoolResult l, ValueResult r) -> Bool l == r
       (ValueResult lval, ValueResult rval) -> lval == rval
       (ValueResult l, BoolResult r) -> l == Bool r
-    Path path -> ValueResult (getByPath path v)
+    Path (Located{value = path}) -> ValueResult (getByPath path v)
     Value val -> ValueResult val
     Like l r -> BoolResult case (go l, go r) of
       (ValueResult (String ls), ValueResult (String lr)) -> lr `Text.isInfixOf` ls

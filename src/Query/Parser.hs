@@ -9,7 +9,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Void (Void)
 import GHC.Exts (IsList (..))
-import Query (Query (..))
+import Query (Located (..), Pos (..), Query (..), Span (..))
 import Text.Megaparsec
 import Text.Megaparsec qualified as M
 import Text.Megaparsec.Char
@@ -22,7 +22,12 @@ queryParser :: Parser Query
 queryParser = hspace *> expr <* eof
  where
   expr = makeExprParser term table <* hspace
-  pathParser = sepBy1 @Parser keyParser "."
+  pathParser = do
+    let toPos M.SourcePos{..} = Pos{column = M.unPos sourceColumn, row = M.unPos sourceLine}
+    begin <- toPos <$> M.getSourcePos
+    path <- (:) <$> keyParser <*> many ("." >> keyParserEmpty)
+    end <- toPos <$> M.getSourcePos
+    pure $ Located path (Span begin end)
 
   braced = between ("(" <* hspace) (")" <* hspace)
 
@@ -66,6 +71,7 @@ queryParser = hspace *> expr <* eof
 
   stringP = between "\"" "\"" (Text.concat <$> many ((M.string "\\\"" $> "\"") <|> (Text.singleton <$> M.noneOf ['\"'])))
 
+  keyParserEmpty = keyParser <|> try (lookAhead ((" " $> "") <|> (eof $> "")))
   keyParser = Key.fromText <$> (simpleKey <|> ("$" *> stringP))
    where
     simpleKey = fmap Text.pack $ (:) <$> oneOf a1 <*> many (oneOf a2)

@@ -27,6 +27,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as Text.IO
 import Data.Traversable (forM)
+import Data.Word (Word8)
 import Effectful qualified as Eff
 import Effectful.Resource qualified as Eff
 import Effectful.State.Static.Local qualified as Eff
@@ -42,8 +43,7 @@ import Type.Event
 import Type.Field
 import Type.Name
 import Ui (drawUi)
-import Vty (makeVty)
-import Data.Word (Word8)
+import Vty (withVty)
 
 data AppArguments = AppArguments
   { input :: Input
@@ -60,7 +60,7 @@ app AppArguments{..} = do
   let run = do
         config <- loadConfig configPath ignoreConfig
         defaultFieldParsed <- parseDefaultField (defaultField <|> fromConfig config (.defaultField))
-        makeVty input >>= \vty -> do
+        withVty input \vty -> do
           ch <- newBChan maxBound
           let formatType = reifyFormat (format <|> fromConfig config (.format)) input
               withStream handle action = case formatType of
@@ -101,7 +101,7 @@ app AppArguments{..} = do
                 do
                   void $ B.customMain
                     do vty
-                    do makeVty input
+                    do pure vty
                     do Just ch
                     do brickApp formatType config ch
                     do freshState
@@ -123,7 +123,7 @@ brickApp format config ch =
         vty <- B.getVtyHandle
         let output = V.outputIface vty
         liftIO $ V.setMode output V.Mouse True
-    , appAttrMap = const AttrMap.yaml
+    , appAttrMap = const AttrMap.attrs
     }
 
 reifyFormat :: Maybe Format -> Input -> Format

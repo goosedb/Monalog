@@ -2,11 +2,16 @@ module Ui where
 
 import Brick qualified as B
 import Brick.Widgets.Border qualified as B
-import Control.Lens
+import Brick.Widgets.Core ((<+>))
+import Control.Lens hiding (at)
 import Data.Generics.Labels ()
 import Data.List (sortBy)
+import Data.List.NonEmpty qualified as Nel
+import Data.Text qualified as Text
+import Query (Pos (..), Span (..))
 import Type.AppState qualified as AS
 import Type.AvailableSpace (AvailableSpace (..))
+import Type.Field (textPath)
 import Type.LogViewPosition (LogViewPosition (..))
 import Type.Name
 import Type.TBool
@@ -17,14 +22,29 @@ import Widgets.Fields.Ui (fieldsWidgetDraw)
 import Widgets.LogView.Types (LogViewWidget (..), LogViewWidgetSettings (..))
 import Widgets.LogView.Ui (logViewWidgetDraw)
 import Widgets.LogsView.Ui (logsViewWidgetDraw)
+import Widgets.Query.Types
 import Widgets.Query.Ui (queryWidgetDraw)
 import Widgets.StatusBar.Types
 import Widgets.StatusBar.Ui
+import Prelude hiding (span)
 
 drawUi :: AS.AppState -> [B.Widget Name]
 drawUi AS.AppState{..} =
   [ case activeWidget of
       (AS.DialogWidgetName : _) -> maybe B.emptyWidget dialogWidgetDraw dialogWidget
+      _ -> B.emptyWidget
+  , case queryView.hint of
+      Just Hint{..}
+        | Is <- isQueryWidgetActive ->
+            B.relativeTo
+              (WidgetName . QueryWidgetName $ QueryWidgetEditor)
+              (B.Location (span.from.column - 1, span.from.row))
+              let txtHints = map textPath (Nel.toList completions)
+                  highlightSelected i t = B.hBox $ map B.txt if Just i == selected then [">>", t, " "] else ["  ", t, " "]
+               in B.withAttr (B.attrName "hint")
+                    . B.vLimit (Nel.length completions + 1)
+                    . B.hLimit (maximum (map Text.length txtHints) + 3)
+                    $ B.vBox (zipWith highlightSelected [0 ..] txtHints)
       _ -> B.emptyWidget
   , sortExtents
       . B.border

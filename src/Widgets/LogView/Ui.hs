@@ -59,7 +59,7 @@ logViewWidgetDraw isActive availableSpace LogViewWidget{..} =
                               . generateCache (if textWrap then Just w else Nothing) selectedLog jsonpathFilter
                               $ showJsonpath
                         d = fromIntegral @_ @Double
-                        shownPercent = d h' / d contLen
+                        shownPercent = d h' / d (contLen + (h' - 1))
                         offsetPercent = d offset / d contLen
                         scrollSize = max 1 $ ceiling @_ @Int $ shownPercent * d h'
                         offsetFize = max 0 $ min (h' - 1) $ ceiling @_ @Int $ offsetPercent * (d h' - d scrollSize)
@@ -69,7 +69,7 @@ logViewWidgetDraw isActive availableSpace LogViewWidget{..} =
                             B.hLimit w $
                               either
                                 do B.vBox . map B.txt
-                                do draw . Seq.take h' . Seq.drop offset 
+                                do draw . Seq.take h' . Seq.drop offset
                                 do content
                         , B.padLeft B.Max . B.vBox $
                             map
@@ -101,7 +101,10 @@ logViewWidgetDraw isActive availableSpace LogViewWidget{..} =
           ]
  where
   draw =
-    let clickToCopy Token{..} = case kind of
+    let clickToFilter Token{..} = case kind of
+          Plus -> clickable (mkName $ LogViewWidgetFilterValue keys)
+          _ -> id
+        clickToCopy Token{..} = case kind of
           Key -> clickable (mkName $ LogViewWidgetCopyKey jsonpath)
           Bullet -> clickable (mkName $ LogViewWidgetCopyKey jsonpath)
           _ -> id
@@ -118,5 +121,5 @@ logViewWidgetDraw isActive availableSpace LogViewWidget{..} =
             )
      in B.vBox
           . map
-            (B.hBox . map (\t@Token{..} -> clickToCopy t . colorize t $ B.txt text))
+            (B.hBox . map (\t@Token{..} -> clickToFilter t . clickToCopy t . colorize t $ B.txt text))
           . toList
