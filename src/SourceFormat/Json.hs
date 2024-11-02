@@ -1,42 +1,45 @@
 module SourceFormat.Json (jsonLinesReader) where
 
-import Conduit qualified as C
 import Config (Prefix (..))
-import Data.Aeson (Key)
 import Data.Aeson qualified as J
-import Data.ByteString qualified as Bytes
+import Data.Aeson.Key qualified as Key
 import Data.ByteString.Lazy qualified as Bytes.Lazy
-import Data.Conduit.Combinators qualified as C
+import Data.Function ((&))
 import Data.Maybe (fromMaybe)
-import Data.Text qualified as Text
-import Data.Text.Encoding qualified as Text
-import Data.Text.Encoding qualified as Text.Encoding
+import Data.Text.Lazy qualified as Text.Lazy
+import Data.Text.Lazy.Encoding qualified as Text.Lazy.Encoding
 import Data.Time (defaultTimeLocale, parseTimeM)
 import Effectful
 import Effectful.State.Static.Local qualified as Eff
 import SourceFormat.Utils
-import System.IO (Handle)
+import Streaming (Of, Stream)
+import Streaming qualified as S
+import Streaming.ByteString qualified as BS
+import Streaming.ByteString.Char8 qualified as BS8
+import Streaming.Prelude qualified as S
+import Type.Field (Path)
 import Type.Log
 
-jsonLinesReader :: (Eff.State Int :> es, IOE :> es) => Maybe Prefix -> [Key] -> Handle -> C.ConduitT () Log (Eff es) ()
-jsonLinesReader prefix defaultField handle =
-  C.sourceHandle handle
-    C..| C.linesUnboundedAscii
-    C..| C.mapM extractPrefix
-    C..| C.map
+jsonLinesReader :: forall es. (Eff.State Int :> es, IOE :> es) => Maybe Prefix -> Path -> BS.ByteStream IO () -> Stream (Of Log) (Eff es) ()
+jsonLinesReader prefix defaultField stream =
+  stream
+    & BS8.lines
+    & S.mapped BS.toLazy
+    & S.hoist liftIO
+    & S.mapM extractPrefix
+    & S.map
       ( \(mbPrefix, logStr) ->
-          let buildDefaultLog (k : ks) = J.object [k J..= buildDefaultLog ks]
-              buildDefaultLog [] = J.String $ Text.Encoding.decodeUtf8 logStr
+          let buildDefaultLog (k : ks) = J.object [Key.fromText k J..= buildDefaultLog ks]
+              buildDefaultLog [] = J.String $ Text.Lazy.toStrict $ Text.Lazy.Encoding.decodeUtf8 logStr
               defaultLog = buildDefaultLog defaultField
-              decodedValue = J.decode (Bytes.Lazy.fromStrict logStr)
+              decodedValue = J.decode logStr
            in (mbPrefix, fromMaybe defaultLog decodedValue)
       )
-    C..| packLog
+    & S.mapM packLog
  where
   extractPrefix = case prefix of
-    Just Empty -> pure . (Nothing,)
     Just KubeTm -> \bs -> do
-      let (tm, str) = Bytes.break (32 ==) bs
-      let parsedTm = parseTimeM False defaultTimeLocale "%Y-%m-%dT%H:%M:%S%Q%Z" $ Text.unpack $ Text.decodeUtf8 tm
+      let (tm, str) = Bytes.Lazy.break (32 ==) bs
+      let parsedTm = parseTimeM False defaultTimeLocale "%Y-%m-%dT%H:%M:%S%Q%Z" $ Text.Lazy.unpack $ Text.Lazy.Encoding.decodeUtf8 tm
       pure (Timestamp <$> parsedTm, str)
     Nothing -> pure . (Nothing,)

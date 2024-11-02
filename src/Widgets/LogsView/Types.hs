@@ -1,7 +1,6 @@
 module Widgets.LogsView.Types where
 
 import Brick qualified as B
-import Brick.BChan qualified as B
 import Consts
 import Control.Concurrent.STM (TQueue)
 import Data.Generics.Labels ()
@@ -9,7 +8,6 @@ import Data.Vector.Mutable qualified as MVec
 import GHC.Generics (Generic)
 import Graphics.Vty qualified as V
 import Query (Query)
-import Type.Event qualified as E
 import Type.Field (Field (..))
 import Type.Log as Logs
 import Type.MaxWidth
@@ -20,12 +18,12 @@ data SelectedField = SelectedField
   , width :: MaxWidth
   }
 
-data ActiveLogs = All | Filtered
+data ActiveLogs = All | FilteredAndSorted
   deriving (Eq)
 
 data LogsViewWidget = LogsViewWidget
   { allLogs :: Logs Mutable
-  , filteredLogs :: Logs Mutable
+  , filteredAndSortedLogs :: Logs Mutable
   , selectedLog :: Maybe (LineNumber, Log)
   , selectedFields :: [SelectedField]
   , defaultSelectedFields :: [SelectedField]
@@ -38,6 +36,8 @@ data LogsViewWidget = LogsViewWidget
   }
   deriving (Generic)
 
+type PushFiltered = Either (Logs Mutable) [Log] -> IO ()
+
 data LogsWidgetEvent
   = Click LogsViewWidgetName
   | Move LogsViewWidgetName B.Location B.Location
@@ -45,8 +45,10 @@ data LogsWidgetEvent
   | AltScroll Int
   | Key V.Key [V.Modifier]
   | NewLog Log
-  | FilteredLog Log
-  | RunFilter (B.BChan E.Event) Query
+  | SelectField MaxWidth Field
+  | FilteredAndSortedLog Log
+  | FilteredAndSortedLogs (Logs Mutable)
+  | RunQuery PushFiltered Query
   | ClearFilter
   | GoToTop
   | GoToBottom
@@ -68,6 +70,7 @@ data LogsViewWidgetCallbacks s = LogsViewWidgetCallbacks
   , selectedLogChanged :: ~(Log -> B.EventM Name s ())
   , goToRequest :: B.EventM Name s ()
   , resetFollow :: ~(B.EventM Name s ())
+  , addSort :: ~(Field -> B.EventM Name s ())
   }
 
 mkName :: LogsViewWidgetName -> Name
@@ -83,7 +86,7 @@ initLogsView defaultSelectedFields = do
   pure
     LogsViewWidget
       { allLogs = MutableLogs allLogs 0
-      , filteredLogs = MutableLogs filteredLogs 0
+      , filteredAndSortedLogs = MutableLogs filteredLogs 0
       , selectedLog = Nothing
       , selectedFields = defaultSelectedFields
       , defaultSelectedFields

@@ -1,7 +1,6 @@
 module Widgets.LogsView.Handler where
 
 import Brick qualified as B
-import Brick.BChan qualified as B
 import Buffer (Buffer (..), makeBuffer)
 import Consts (initialTopLine)
 import Control.Concurrent (forkIO, killThread)
@@ -15,19 +14,26 @@ import Data.Foldable (traverse_)
 import Data.Generics.Labels ()
 import Data.Maybe (fromJust)
 import Data.Vector qualified as Vec
+import Data.Vector.Algorithms.Tim qualified as MVec
+import Data.Vector.Generic qualified as GVec
 import Data.Vector.Mutable qualified as MVec
 import Graphics.Vty qualified as V
-import Query (Query)
-import Query.Eval (QueryResult (..), evalQuery)
-import Type.Event qualified as E
+import Query (Query (..))
+import Query.Eval (FilterResult (..), compareLogs, evalFilter)
 import Type.Log as Logs
-import Type.Name
+import Type.Name (
+  LineNumber (MkLineNumber),
+  LogsViewWidgetName (..),
+  Name,
+ )
 import Widgets.LogsView.Types
 import Widgets.Scrollbar.Horizontal qualified as HScroll
 import Widgets.Types
 
 type Ctx s = (WithWidgetContext s LogsViewWidgetCallbacks LogsViewWidget)
 
+{-# SCC logsViewWidgetHandleEvent #-}
+{-# INLINE logsViewWidgetHandleEvent #-}
 logsViewWidgetHandleEvent :: (Ctx s) => LogsWidgetEvent -> B.EventM Name s ()
 logsViewWidgetHandleEvent e = do
   case e of
@@ -36,6 +42,7 @@ logsViewWidgetHandleEvent e = do
     Key key mods -> handleKeyboardEvent key mods
     Click (LogsViewWidgetFieldMove dir) -> handleMoveClick dir
     Click (LogsViewWidgetLogEntry lineNumber _) -> handleMouseSelect lineNumber
+    Click (LogsViewWidgetFieldHeader a) -> ?callbacks.addSort a
     Move (LogsViewWidgetHScrollBar _) prevLoc newLoc -> do
       HScroll.handleScroll prevLoc newLoc (mkName LogsViewWidgetViewport)
       B.invalidateCache
@@ -51,15 +58,21 @@ logsViewWidgetHandleEvent e = do
           addLogsToView
           updateTotalLines
         _ -> pure ()
-    FilteredLog l -> do
-      B.zoom (widgetState . #filteredLogs) (addLog l)
-
+    FilteredAndSortedLog l -> do
+      B.zoom (widgetState . #filteredAndSortedLogs) (addLog l)
       use (widgetState . #activeLogs) >>= \case
-        Filtered -> do
+        FilteredAndSorted -> do
           addLogsToView
           updateTotalLines
         _ -> pure ()
-    RunFilter ch q -> runFilter ch q
+    FilteredAndSortedLogs l -> do
+      widgetState . #filteredAndSortedLogs .= l
+      use (widgetState . #activeLogs) >>= \case
+        FilteredAndSorted -> do
+          addLogsToView
+          updateTotalLines
+        _ -> pure ()
+    RunQuery push q -> runQuery push q
     ClearFilter -> clearFilter
     GoToTop -> goToTop
     GoToBottom -> goToBottom
@@ -73,15 +86,18 @@ logsViewWidgetHandleEvent e = do
       defaultSelectedFields <- use $ widgetState . #defaultSelectedFields
       B.zoom widgetState do
         allLogs <- liftIO $ MVec.new 64
-        filteredLogs <- liftIO $ MVec.new 1
+        filteredAndSortedLogs <- liftIO $ MVec.new 1
         #selectedFields .= defaultSelectedFields
         #allLogs .= MutableLogs allLogs 0
-        #filteredLogs .= MutableLogs filteredLogs 0
+        #filteredAndSortedLogs .= MutableLogs filteredAndSortedLogs 0
         #visibleLogs .= ImmutableLogs mempty
 
       ?callbacks.topLineChanged initialTopLine
       ?callbacks.totalLinesChanged 0
       B.invalidateCache
+    SelectField width field -> do
+      B.invalidateCache
+      widgetState . #selectedFields %= (<> [SelectedField{..}])
     _ -> pure ()
  where
   addLogsToView = do
@@ -129,39 +145,53 @@ addLog l = do
   liftIO $ MVec.write grewVec len l
   #len += 1
 
-runFilter :: (Ctx s) => B.BChan E.Event -> Query -> B.EventM Name s ()
-runFilter ch query = do
-  filterQueue <- liftIO newTQueueIO
+runQuery :: (Ctx s) => PushFiltered -> Query -> B.EventM Name s ()
+runQuery pushFiltered query = do
   vec <- liftIO $ MVec.new 64
   changeTopLine minimalTopLine
   B.zoom widgetState do
-    #activeLogs .= Filtered
-    #filteredLogs .= Logs.MutableLogs vec 0
-    #filterQueue .= Just filterQueue
+    #activeLogs .= case query of
+      Query Nothing [] -> All
+      _ -> FilteredAndSorted
+    #filteredAndSortedLogs .= Logs.MutableLogs vec 0
     updateVisibleLogs
-
-    allLogs <- use #allLogs
-
-    Buffer{..} <- liftIO $ makeBuffer (B.writeBChan ch . E.FilteredLogs)
-
-    let filterAndSend l = when (filterLog l) do
-          pushBuffer l
-
-    workerId <- liftIO $ forkIO do
-      forM_ [0 .. allLogs.len - 1] \i -> do
-        MVec.read allLogs.logs i >>= filterAndSend
-      forever do
-        atomically (readTQueue filterQueue) >>= filterAndSend
-
-    #killFilterWorker .= (killThread workerId >> killBuffer)
-
+  allLogs <- use (widgetState . #allLogs)
+  case query of
+    Query{filter = Nothing, sort = []} -> pure ()
+    Query{filter = Just f, sort = []} -> do
+      filterQueue <- liftIO newTQueueIO
+      B.zoom widgetState do
+        #filterQueue .= Just filterQueue
+        Buffer{..} <- liftIO $ makeBuffer (pushFiltered . Right)
+        let filterAndSend l = when (filterLog f l) (pushBuffer l)
+        workerId <- liftIO $ forkIO do
+          forM_ [0 .. allLogs.len - 1] \i -> do
+            MVec.read allLogs.logs i >>= filterAndSend
+          forever do
+            atomically (readTQueue filterQueue) >>= filterAndSend
+        #killFilterWorker .= (killThread workerId >> killBuffer)
+    Query{filter = Nothing, sort = s@(_ : _)} -> do
+      workerId <- liftIO $ forkIO do
+        copy <- MVec.clone allLogs.logs
+        MVec.sortBy (compareLogs s) (MVec.slice 0 allLogs.len copy)
+        pushFiltered $ Left $ MutableLogs copy allLogs.len
+      widgetState . #killFilterWorker .= killThread workerId
+    Query{filter = Just f, sort = s} -> do
+      workerId <- liftIO $ forkIO do
+        filteredLogs <-
+          GVec.freeze @IO (MVec.slice 0 allLogs.len allLogs.logs)
+            >>= GVec.thaw . Vec.filter (filterLog f)
+        MVec.sortBy (compareLogs s) filteredLogs
+        pushFiltered $ Left $ MutableLogs filteredLogs (MVec.length filteredLogs)
+      widgetState . #killFilterWorker .= killThread workerId
   B.invalidateCache
  where
-  filterLog filteredLog = case evalQuery filteredLog.value query of
+  filterLog f filteredLog = case evalFilter filteredLog.value f of
     BoolResult b -> b
     ValueResult (Bool b) -> b
     _ -> False
 
+{-# INLINE clearFilter #-}
 clearFilter :: (Ctx s) => B.EventM Name s ()
 clearFilter = do
   changeTopLine minimalTopLine
@@ -176,11 +206,13 @@ clearFilter = do
 
   B.invalidateCache
 
+{-# INLINE updateTotalLines #-}
 updateTotalLines :: (Ctx s) => B.EventM Name s ()
 updateTotalLines = B.zoom widgetState getActiveLogs >>= ?callbacks.totalLinesChanged . (.len)
 
 data GoTo = Line Int | Bottom | Top | Relative Int
 
+{-# INLINE handleKeyboardEvent #-}
 handleKeyboardEvent :: (Ctx s) => V.Key -> [V.Modifier] -> B.EventM Name s ()
 handleKeyboardEvent key mods = do
   case key of
@@ -208,24 +240,28 @@ handleKeyboardEvent key mods = do
  where
   shifted b = key == b && mods == [V.MShift]
 
+{-# INLINE goToTop #-}
 goToTop :: (Ctx s) => B.EventM Name s ()
 goToTop =
   goTo Top
     >> B.invalidateCache
     >> deselectLog
 
+{-# INLINE goToBottom #-}
 goToBottom :: (Ctx s) => B.EventM Name s ()
 goToBottom =
   goTo Bottom
     >> B.invalidateCache
     >> deselectLog
 
+{-# INLINE handleKeyboardSelect #-}
 handleKeyboardSelect :: (Ctx s) => LineNumber -> B.EventM Name s ()
 handleKeyboardSelect line =
   use (widgetState . #selectedLog) >>= maybe
     do selectByLine line
     do const deselectLog
 
+{-# INLINE handleMouseSelect #-}
 handleMouseSelect :: (Ctx s) => LineNumber -> B.EventM Name s ()
 handleMouseSelect line = do
   alreadySelected <- use (widgetState . #selectedLog)
@@ -234,6 +270,7 @@ handleMouseSelect line = do
     then deselectLog
     else traverse_ (select line) selecting
 
+{-# INLINE deselectLog #-}
 deselectLog :: (Ctx s) => B.EventM Name s ()
 deselectLog = do
   alreadySelected <- use (widgetState . #selectedLog)
@@ -243,6 +280,8 @@ deselectLog = do
   widgetState . #selectedLog .= Nothing
   ?callbacks.selectedLog Nothing
 
+{-# SCC move #-}
+{-# INLINE move #-}
 move :: (Ctx s) => Int -> B.EventM Name s ()
 move diff =
   use (widgetState . #selectedLog) >>= maybe
@@ -261,13 +300,17 @@ move diff =
               goTo (Relative (newLineNumber - middle))
           | otherwise -> pure ()
 
+{-# SCC selectByLine #-}
+{-# INLINE selectByLine #-}
 selectByLine :: (Ctx s) => LineNumber -> B.EventM Name s ()
 selectByLine line = do
   B.zoom widgetState (getLineLog line) >>= maybe (pure ()) (select line)
 
+{-# INLINE getLogById #-}
 getLogById :: (Ctx s) => Idx -> B.EventM Name s Log
 getLogById idx = use (widgetState . #allLogs . #logs) >>= liftIO . ($ idx.rawIdx - 1) . MVec.read
 
+{-# INLINE select #-}
 select :: (Ctx s) => LineNumber -> Log -> B.EventM Name s ()
 select lineNumber selectingLog = do
   deselectLog
@@ -275,6 +318,8 @@ select lineNumber selectingLog = do
   B.invalidateCacheEntry (mkName $ LogsViewWidgetLogEntry lineNumber selectingLog.idx)
   ?callbacks.selectedLog (Just selectingLog)
 
+{-# SCC goTo #-}
+{-# INLINE goTo #-}
 goTo :: forall s. (Ctx s) => GoTo -> B.EventM Name s ()
 goTo gt = do
   topLine <- use $ widgetState . #topLine
@@ -322,7 +367,7 @@ getActiveLogs :: B.EventM Name LogsViewWidget (Logs Mutable)
 getActiveLogs =
   use #activeLogs >>= \case
     All -> use #allLogs
-    Filtered -> use #filteredLogs
+    FilteredAndSorted -> use #filteredAndSortedLogs
 
 getLineLog :: (Ctx s) => LineNumber -> B.EventM Name LogsViewWidget (Maybe Log)
 getLineLog line = do

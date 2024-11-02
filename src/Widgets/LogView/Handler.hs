@@ -4,8 +4,8 @@ module Widgets.LogView.Handler where
 
 import Brick qualified as B
 import Brick.Widgets.Edit qualified as B
-import Conduit (MonadIO (..))
-import Control.Lens
+import Config (updateGlobalConfigAsync)
+import Control.Lens (Lens', use, uses, (%=), (.=), (?=))
 import Control.Monad (when)
 import Copy.Native qualified as Native
 import Copy.Osc52 qualified as Osc52
@@ -19,7 +19,6 @@ import Data.JSONPath.Parser qualified as JP
 import Data.Maybe (fromJust)
 import Data.Sequence qualified as Seq
 import Data.Text qualified as Text
-import Data.Text.IO qualified
 import GHC.Exts (IsList (..))
 import Graphics.Vty qualified as V
 import Text.Megaparsec qualified as M
@@ -53,13 +52,14 @@ logViewWidgetHandleEvent logViewPosition widgetState callbacks = \case
         widgetState . #settings . #width %= \case
           Manual i -> Manual $ max 10 $ i + (fst prevLoc - fst newLoc)
           Auto -> Auto
-    updateCache >> B.invalidateCache
+    B.invalidateCache
   Move LogViewWidgetScrollBar (B.Location prevLoc) (B.Location newLoc) -> do
     (_, fromIntegral @_ @Double -> r) <- contentExtent
     contLen <- uses (widgetState . #cache) (maybe 0 Seq.length)
     scroll (round $ fromIntegral (snd newLoc - snd prevLoc) / r * fromIntegral contLen)
     B.invalidateCache
   Move{} -> pure ()
+  MoveStop -> updateCache >> B.invalidateCache
   Click b loc _ -> case b of
     LogViewWidgetBorder -> do
       B.Extent{extentSize = (c, r)} <-
@@ -80,16 +80,20 @@ logViewWidgetHandleEvent logViewPosition widgetState callbacks = \case
       LogViewWidget{..} <- use widgetState
       let LogViewWidgetSettings{..} = settings
       if showJsonpath
-        then either (const $ pure ()) (copy . extactValue selectedLog.value) jsonpathFilter
+        then either (const $ pure ()) (copy . extractValue selectedLog.value) jsonpathFilter
         else copy selectedLog.value
     LogViewWidgetCopyMethod -> do
-      widgetState . #settings . #copyMethod %= \case
+      new <- uses (widgetState . #settings . #copyMethod) \case
         Osc52 -> Native
         Native -> Osc52
+      widgetState . #settings . #copyMethod .= new
+      updateGlobalConfigAsync #copyMethod (const new)
       B.invalidateCacheEntry (mkName LogViewWidgetContent)
     LogViewWidgetWordWrap -> do
       let d = fromIntegral @_ @Double
-      widgetState . #settings . #textWrap %= not
+      new <- uses (widgetState . #settings . #textWrap) not
+      widgetState . #settings . #textWrap .= new
+      updateGlobalConfigAsync #textWrap (const new)
       offsetPercentage <- do
         LogViewWidget{..} <- use widgetState
         pure $ ((/) `on` d) offset (maybe 1 Seq.length cache)
@@ -103,13 +107,12 @@ logViewWidgetHandleEvent logViewPosition widgetState callbacks = \case
       let valueToCopy = do
             parsedPath <- mkJPath (Text.concat path)
             let TokenizedValue{..} = selectedLog
-            pure $ extactValue value parsedPath
+            pure $ extractValue value parsedPath
       maybe (pure ()) copy valueToCopy
     LogViewWidgetFilterValue path -> do
       LogViewWidget{..} <- use widgetState
       let TokenizedValue{..} = selectedLog
-      let mbVal = extactValue value <$> mkJPath ("$." <> Text.intercalate "." path)
-      liftIO $ Data.Text.IO.appendFile "log.log" ("$." <> Text.intercalate "." path <> "\n")
+      let mbVal = extractValue value <$> mkJPath ("$." <> Text.intercalate "." path)
       maybe (pure ()) (callbacks.addFilter path) mbVal
     _ -> pure ()
   Key k mods -> do
@@ -129,10 +132,8 @@ logViewWidgetHandleEvent logViewPosition widgetState callbacks = \case
     use (widgetState . #cache) >>= \case
       Just _ -> pure ()
       Nothing -> updateCache
-
   updateCache = do
     (c, _) <- contentExtent
-    liftIO $ appendFile "log.log" (show c <> "\n")
     LogViewWidget{..} <- use widgetState
     let LogViewWidgetSettings{..} = settings
     let newCache =
@@ -154,7 +155,7 @@ logViewWidgetHandleEvent logViewPosition widgetState callbacks = \case
           B.invalidateCacheEntry (mkName LogViewWidgetContent)
           widgetState . #offset .= newOffset
 
-  extactValue value =
+  extractValue value =
     (\case [x] -> x; a -> Array $ fromList a)
       . ($ value)
       . PE.executeJSONPath

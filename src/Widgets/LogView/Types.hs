@@ -13,7 +13,6 @@ import Data.Text (Text)
 import GHC.Exts (IsList (..))
 import GHC.Generics
 import Graphics.Vty qualified as V
-import Type.Field (Path)
 import Type.Name
 import Type.WidgetSize (WidgetSize (Auto))
 import Widgets.Editor (emptyEditor)
@@ -82,6 +81,7 @@ data LogViewWidgetEvent
   | Scroll Int
   | Click LogViewWidgetName B.Location B.Location
   | Move LogViewWidgetName B.Location B.Location
+  | MoveStop
   | Key V.Key [V.Modifier]
 
 data LogViewWidgetCallbacks s = LogViewWidgetCallbacks

@@ -2,23 +2,23 @@ module Handler (handleEvent) where
 
 import Brick qualified as B
 import Brick.BChan qualified as B
-import Conduit (MonadIO (..))
 import Config
 import Control.Exception (throwIO)
 import Control.Lens
 import Control.Monad (forM_, when)
+import Control.Monad.IO.Class (MonadIO (..))
 import Data.Bool (bool)
 import Data.Either (isRight)
 import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromJust, isJust)
-import Data.Monoid (Last (..))
 import Graphics.Vty qualified as V
 import Type.AppState
 import Type.AppState qualified as AS
 import Type.Event
-import Type.Field (Field (..), textPath)
+import Type.Field (Field (..))
 import Type.Log (Log (..))
+import Type.MaxWidth (MaxWidth (MaxWidth))
 import Type.Name
 import Type.Name qualified as N
 import Widgets.Dialog.Handler qualified as Dialog
@@ -29,19 +29,19 @@ import Widgets.LogView.Handler qualified as LogView
 import Widgets.LogView.Types (LogViewWidget (LogViewWidget), newLogView)
 import Widgets.LogView.Types qualified as LogView
 import Widgets.LogsView.Handler qualified as LogsView
+import Widgets.LogsView.Types (LogsViewWidget (..))
 import Widgets.LogsView.Types qualified as LogsView
 import Widgets.Query.Handler qualified as Query
-import Widgets.Query.Types (QueryWidget (QueryWidget))
 import Widgets.Query.Types qualified as Query
 import Widgets.Query.Types qualified as QueryWidget
 import Widgets.StatusBar.Handler qualified as StatusBar
 import Widgets.StatusBar.Types qualified as StatusBar
 import Widgets.Types (PackedLens' (PackedLens'))
 
-handleEvent :: Format -> AppConfig -> B.BChan Event -> B.BrickEvent Name Event -> B.EventM Name AppState ()
-handleEvent format config ch e = do
+{-# SCC handleEvent #-}
+handleEvent :: B.BChan Event -> B.BrickEvent Name Event -> B.EventM Name AppState ()
+handleEvent ch e = do
   ms <- use #mouseState
-
   activeWidget <- use #activeWidget
   logView <- use #logView
   case e of
@@ -51,10 +51,15 @@ handleEvent format config ch e = do
         liftIO $ throwIO txt
       NewLogs ls -> forM_ ls \l -> do
         callFieldsWidget (Fields.NewLog l)
-        callLogsViewWidget (LogsView.NewLog l)
-      FilteredLogs ls -> forM_ ls \l -> do
-        callLogsViewWidget (LogsView.FilteredLog l)
+        callLogsViewWidget (LogsView.NewLog l.log)
+      FilteredLogs (Right ls) -> forM_ ls \l -> do
+        callLogsViewWidget (LogsView.FilteredAndSortedLog l)
+      FilteredLogs (Left ls) ->
+        callLogsViewWidget (LogsView.FilteredAndSortedLogs ls)
       ResetStatus tId -> callStatusBarWidget $ StatusBar.ResetStatus tId
+      SelectFields fs -> do
+        forM_ fs (callLogsViewWidget . LogsView.SelectField (MaxWidth 0))
+        forM_ fs (callFieldsWidget . Fields.SelectField)
     B.MouseDown (WidgetName name) V.BLeft _ loc' | ms == Up -> do
       absoluteLoc <- translateToAbsolute (WidgetName name) loc'
       let canClick = case activeWidget of
@@ -94,7 +99,11 @@ handleEvent format config ch e = do
           #mouseState .= Down clickedName loc'
     B.MouseDown (WidgetName name) V.BScrollDown mods _ -> handleScroll name mods 1
     B.MouseDown (WidgetName name) V.BScrollUp mods _ -> handleScroll name mods (-1)
-    B.MouseUp{} -> #mouseState .= Up
+    B.MouseUp{} -> do
+      case ms of
+        Down (WidgetName (LogViewWidgetName _)) _ -> callLogViewWidget LogView.MoveStop
+        _ -> pure ()
+      #mouseState .= Up
     B.VtyEvent V.EvMouseUp{} -> #mouseState .= Up
     B.VtyEvent V.EvResize{} -> B.invalidateCache
     B.VtyEvent (V.EvKey V.KEsc _) | Right LogViewWidget{settings} <- logView -> do
@@ -221,6 +230,7 @@ handleEvent format config ch e = do
             , goToRequest = do
                 #activeWidget .= [AS.StatusBarWidgetName]
                 callStatusBarWidget StatusBar.ActivateEditor
+            , addSort = callQueryWidget . Query.AddSort
             }
         ?widgetState = PackedLens' #logsView
      in LogsView.logsViewWidgetHandleEvent
@@ -239,16 +249,14 @@ handleEvent format config ch e = do
     Query.QueryWidgetCallbacks
       { Query.execFilter = \q -> do
           activateLogsView
-          callLogsViewWidget $ LogsView.RunFilter ch q
+          callLogsViewWidget $ LogsView.RunQuery (B.writeBChan ch . FilteredLogs) q
       , Query.clearFilter = callLogsViewWidget LogsView.ClearFilter
       , Query.showError = errorDialog
       }
 
   fieldsWidgetCallbacks =
     Fields.FieldsWidgetCallbacks
-      { Fields.fieldSelected = \width field -> do
-          B.invalidateCache
-          #logsView . #selectedFields %= (<> [LogsView.SelectedField{..}])
+      { Fields.fieldSelected = \mw f -> callLogsViewWidget $ LogsView.SelectField mw f
       , Fields.fieldsCreated = callQueryWidget . Query.NewFields
       , Fields.fieldUnselected = \field' -> do
           B.invalidateCache
@@ -262,25 +270,11 @@ handleEvent format config ch e = do
               do \mw -> LogsView.SelectedField{width = mw, ..}
               do Map.lookup path paths
             _ -> f
-      , Fields.configSaved = \case
-          Fields.SavedSuccessfully -> callStatusBarWidget StatusBar.ConfigSaved
-          Fields.SaveErrorHappened err -> errorDialog $ "Error during saving of config: " <> err
-      , Fields.getConfig = do
-          fields <- use $ #logsView . #selectedFields
-          pure
-            AppConfig
-              { defaultField = config.defaultField
-              , format = Last $ Just format
-              , fields =
-                  Last . Just $
-                    fields <&> \selectedField -> case selectedField.field of
-                      Raw -> "@raw"
-                      Timestamp -> "@timestamp"
-                      Field path -> textPath path
-              , copyMethod = config.copyMethod
-              , copyCommand = config.copyCommand
-              , prefix = config.prefix
-              }
+      , Fields.saveFieldsSet = do
+          LogsViewWidget{..} <- use #logsView
+          result <- liftIO $ updateLocalConfig #columns do
+            const $ map (\sf -> JsonField sf.field) selectedFields
+          either (errorDialog . dumpErrorToText) (const $ callStatusBarWidget StatusBar.ConfigSaved) result
       , Fields.holdMouse = \n l -> #mouseState .= Down n l
       }
 

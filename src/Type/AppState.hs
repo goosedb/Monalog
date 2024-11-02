@@ -2,6 +2,7 @@ module Type.AppState where
 
 import Brick qualified as B
 import Brick.Widgets.Edit qualified as B
+import Config (Input (..))
 import Consts
 import Control.Lens
 import Data.Map.Strict qualified as Map
@@ -45,8 +46,8 @@ data ActiveWidgetName
   | DialogWidgetName
   deriving (Eq)
 
-initialState :: Maybe String -> Maybe CopyMethod -> Maybe [Field] -> IO AppState
-initialState copyCmd copyMethod defaultFields = do
+initialState :: Bool -> LogViewPosition -> FieldsViewLayout -> Input -> Maybe String -> Maybe CopyMethod -> Maybe [Field] -> IO AppState
+initialState textWrap logViewPosition fieldsLayout input copyCmd copyMethod defaultFields = do
   let defaultWidth = MaxWidth 1
   initialLogsView <- initLogsView (maybe [] (map (`SelectedField` defaultWidth)) defaultFields)
   let fields =
@@ -64,6 +65,7 @@ initialState copyCmd copyMethod defaultFields = do
             emptyLogWidgetSettings
               & #copyMethod %~ maybe id const copyMethod
               & #nativeCopyCmd .~ copyCmd
+              & #textWrap .~ textWrap
       , statusBar =
           StatusBarWidget
             { totalLines = 0
@@ -75,7 +77,7 @@ initialState copyCmd copyMethod defaultFields = do
             , isEditorActive = False
             , topLine = initialTopLine
             , followLogs = initialFollowLogs
-            , logViewPosition = LogViewPositionRight
+            , logViewPosition = logViewPosition
             , status = Idle
             }
       , fieldsView =
@@ -83,7 +85,7 @@ initialState copyCmd copyMethod defaultFields = do
             { fields = fields
             , defaultFields = fields
             , width = Auto
-            , layout = Flatten
+            , layout = fieldsLayout
             }
       , queryView =
           QueryWidget
@@ -95,3 +97,11 @@ initialState copyCmd copyMethod defaultFields = do
       , mouseState = Up
       , activeWidget = [LogsWidgetName]
       }
+ where
+  initialFields :: Map.Map Field FieldState
+  initialFields = case input of
+    Files _ -> mempty
+    Stdin ->
+      Map.fromList
+        [ (Timestamp, FieldState{isSelected = False, maxWidth = MaxWidth 8})
+        ]

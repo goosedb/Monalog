@@ -9,7 +9,7 @@ import Data.Text (Text)
 import GHC.Generics (Generic)
 import Graphics.Vty qualified as V
 import Query
-import Type.Field (Path)
+import Type.Field (Field, Path)
 import Type.Name
 
 data QueryWidget = QueryWidget
@@ -37,7 +37,8 @@ data QueryWidgetEvent
   = Key V.Key [V.Modifier]
   | Click QueryWidgetName B.Location B.Location
   | NewFields [Path]
-  | AddFilter [Text] Value
+  | AddFilter Path Value
+  | AddSort Field
   | ActivateEditor
 
 mkName :: QueryWidgetName -> Name

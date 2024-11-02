@@ -2,7 +2,7 @@ module AttrMap where
 
 import Brick.AttrMap qualified as B
 import Data.Bifunctor (Bifunctor (..))
-import Graphics.Vty (cyan, blue, defAttr, green, magenta, red, reverseVideo, withForeColor, withStyle, yellow, cyan)
+import Graphics.Vty (blue, cyan, defAttr, green, magenta, red, reverseVideo, withForeColor, withStyle, yellow)
 
 attrs :: B.AttrMap
 attrs = B.attrMap defAttr (yaml <> hint)

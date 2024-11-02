@@ -3,6 +3,7 @@ module Widgets.StatusBar.Handler where
 import Brick qualified as B
 import Brick.BChan qualified as B
 import Brick.Widgets.Edit qualified as B
+import Config (updateGlobalConfigAsync)
 import Control.Concurrent (forkIO, myThreadId, threadDelay)
 import Control.Lens
 import Control.Monad.IO.Class (MonadIO (..))
@@ -33,10 +34,12 @@ statusBarWidgetHandleEvent ch widgetState StatusBarWidgetCallbacks{..} = \case
   Click n -> do
     widgetState . #isEditorActive .= False
     case n of
-      StatusBarWidgetLogSide ->
-        widgetState . #logViewPosition %= \case
+      StatusBarWidgetLogSide -> do
+        new <- uses (widgetState . #logViewPosition) \case
           LogViewPositionBottom -> LogViewPositionRight
           LogViewPositionRight -> LogViewPositionBottom
+        widgetState . #logViewPosition .= new
+        updateGlobalConfigAsync #logViewSide (const new)
       StatusBarWidgetGoToTop -> do
         goToTop
         widgetState . #followLogs .= False

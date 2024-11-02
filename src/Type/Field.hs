@@ -1,20 +1,27 @@
 module Type.Field where
 
-import Data.Aeson (Key, ToJSON)
-import Data.Aeson.Key qualified as JK
+import Data.Aeson (ToJSON)
+import Data.Set (Set)
+import Data.Set qualified as Set
+import Data.Text (Text)
 import Data.Text qualified as Text
 import GHC.Generics (Generic)
 
-type Path = [Key]
+type Path = [Text]
 
-data Field = Timestamp | Raw | Field Path
+data Field = Timestamp | Field Path
   deriving (Show, Eq, Ord, Generic, ToJSON)
 
 drawLogsViewColumnHeaderTxt :: Field -> Text.Text
 drawLogsViewColumnHeaderTxt = \case
-  Timestamp -> "@timestamp"
-  Raw -> "@raw"
+  Timestamp -> timestampName
   Field path -> textPath path
 
-textPath :: [JK.Key] -> Text.Text
-textPath = Text.intercalate "." . map JK.toText
+timestampName :: Text
+timestampName = "@timestamp"
+
+specialFieldSymbols :: Set Char
+specialFieldSymbols = Set.fromList ['a' .. 'z']
+
+textPath :: Path -> Text.Text
+textPath = Text.intercalate "."

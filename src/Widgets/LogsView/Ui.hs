@@ -5,7 +5,9 @@ import Brick.Widgets.Border qualified as B
 import Brick.Widgets.Center qualified as B
 import Control.Lens
 import Data.Aeson (Value (..), encode)
+import Data.Aeson.Key qualified as Key
 import Data.Aeson.Lens (key)
+import Data.Bool (bool)
 import Data.Foldable qualified as F
 import Data.Generics.Labels ()
 import Data.List (intersperse)
@@ -15,6 +17,7 @@ import Data.Text.Lazy qualified as Text.Lazy
 import Data.Text.Lazy.Encoding qualified as Text.Lazy.Encoding
 import Data.Time.Format qualified as Time
 import Graphics.Vty qualified as V
+import Text (cleanupEscapes)
 import Type.AvailableSpace
 import Type.Field (Field (..), drawLogsViewColumnHeaderTxt)
 import Type.Log as Logs
@@ -23,6 +26,7 @@ import Type.Name
 import Widgets.LogsView.Types
 import Widgets.Scrollbar.Horizontal qualified as HScroll
 
+{-# SCC logsViewWidgetDraw #-}
 logsViewWidgetDraw :: AvailableSpace -> LogsViewWidget -> B.Widget Name
 logsViewWidgetDraw availableSpace LogsViewWidget{..} = B.clickable (mkName LogsViewWidgetItself) $
   withHorizontalScroll do
@@ -75,10 +79,12 @@ logsViewWidgetDraw availableSpace LogsViewWidget{..} = B.clickable (mkName LogsV
             rightArrowName = mkName $ LogsViewWidgetFieldMove (Right idx)
          in B.hBox
               [ if isFirstIndex idx then B.txt " " else B.clickable leftArrowName $ B.txt " <"
-              , B.cached (mkName $ LogsViewWidgetFieldHeader field)
-                  . B.hLimit titleWidth
-                  . B.hCenter
-                  $ drawLogsViewColumnHeader field
+              , let headerName = mkName $ LogsViewWidgetFieldHeader field
+                 in B.clickable headerName
+                      . B.cached headerName
+                      . B.hLimit titleWidth
+                      . B.hCenter
+                      $ drawLogsViewColumnHeader field
               , if isLastIndex fieldsNumber idx then B.txt " " else B.clickable rightArrowName $ B.txt "> "
               ]
     do widths
@@ -95,7 +101,7 @@ logsViewWidgetDraw availableSpace LogsViewWidget{..} = B.clickable (mkName LogsV
        in
         B.vBox $ map (const row) [1 .. availableSpace.height]
 
-  logRow (i, l@Log{..}) =
+  logRow (i, l@Log{idx}) =
     let drawColumn width field = drawLogsViewLogField width field l B.<+> B.fill ' '
         logNum = B.hLimit logNumberWidth $ B.str (" " <> show i) B.<+> B.fill ' '
         highlight = if ((.idx) . snd <$> selectedLog) == Just idx then B.modifyDefAttr (\V.Attr{..} -> V.Attr{attrStyle = V.SetTo V.reverseVideo, ..}) else id
@@ -113,21 +119,19 @@ logsViewWidgetDraw availableSpace LogsViewWidget{..} = B.clickable (mkName LogsV
 
   drawLogsViewLogField width field Log{..} = case field of
     Timestamp -> B.str $ Time.formatTime Time.defaultTimeLocale "%H:%M:%S" timestamp
-    Raw -> jsonWidget width value
     Field path -> maybe
       do B.emptyWidget
       do jsonWidget width
-      do F.foldl' (\v k -> v >>= (^? key k)) (Just value) path
+      do F.foldl' (\v (Key.fromText -> k) -> v >>= (^? key k)) (Just value) path
 
   jsonWidget width = \case
-    String t -> B.txt (Text.take width t)
-    Bool b -> B.str (show b)
+    String t -> B.txt (Text.take width $ cleanupEscapes t)
+    Bool b -> B.str (bool "false" "true" b)
+    Null -> B.emptyWidget
     Number n
       | S.isInteger n -> B.str (show $ round @_ @Integer n)
       | otherwise -> B.str (show n)
     v -> B.txt . Text.Lazy.toStrict . Text.Lazy.take (fromIntegral width) . Text.Lazy.Encoding.decodeUtf8 . encode $ v
-
--- v -> B.txt . Text.Encoding.decodeUtf8 . Bytes.Lazy.toStrict . encode $ v
 
 isFirstIndex :: Int -> Bool
 isFirstIndex = (== 0)

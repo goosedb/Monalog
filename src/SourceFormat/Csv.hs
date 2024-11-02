@@ -7,30 +7,39 @@ import Data.Aeson.Key qualified as Key
 import Data.Attoparsec.ByteString qualified as P
 import Data.ByteString qualified as Bytes
 import Data.ByteString.Lazy qualified as Bytes.Lazy
-import Data.Conduit qualified as C
-import Data.Conduit.Combinators qualified as C
 import Data.Csv.Parser qualified as Csv.Parser
 import Data.Foldable qualified as F
+import Data.Function ((&))
 import Data.Generics.Labels ()
 import Data.Maybe (fromMaybe)
+import Data.Text (Text)
 import Data.Text.Encoding qualified as Text.Encoding
 import Data.Word (Word8)
 import Effectful (Eff, (:>))
 import Effectful qualified as Eff
 import Effectful.State.Static.Local qualified as Eff
 import SourceFormat.Utils (packLog)
-import System.IO (Handle)
+import Streaming (Of, Stream)
+import Streaming qualified as S
+import Streaming.ByteString qualified as BS
+import Streaming.ByteString.Char8 qualified as BS8
+import Streaming.Prelude qualified as S
+import Type.Field (Field (..))
 import Type.Log (Log)
 
 type Delimiter = Word8
+type SelectFields = [Field] -> IO ()
 
-csvReader :: (Eff.IOE :> es, Eff.State Int :> es) => Delimiter -> Handle -> IO (C.ConduitT () Log (Eff es) ())
-csvReader delim handle = do
-  header <- Bytes.hGetLine handle >>= parseHeader delim
+csvReader :: (Eff.IOE :> es, Eff.State Int :> es) => SelectFields -> Delimiter -> BS.ByteStream IO () -> IO (Stream (Of Log) (Eff es) ())
+csvReader selectFields delim stream = do
+  let linesStream = stream & BS8.lines & S.mapped BS.toStrict
+  Just (rawHeader, rest) <- S.uncons linesStream
+  header <- parseHeader delim rawHeader
+  selectFields (Field . pure <$> header)
   pure $
-    C.sourceHandle handle
-      C..| C.linesUnboundedAscii
-      C..| C.mapM
+    rest
+      & S.hoist S.liftIO
+      & S.mapM
         ( \logStr -> do
             row <- runParseRecord logStr
             let toLazy = Bytes.Lazy.fromStrict
@@ -40,18 +49,18 @@ csvReader delim handle = do
               . J.object
               $ zipWith
                 do \k v -> k J..= fromMaybe (utf8Str v) (decode $ toLazy v)
-                do header
+                do map Key.fromText header
                 do row
         )
-      C..| packLog
+      & S.mapM packLog
  where
   runParseRecord i = either
     do const (pure [])
     do pure
     do runParseCsv delim Csv.Parser.record i
 
-parseHeader :: Word8 -> Bytes.ByteString -> IO [Key.Key]
-parseHeader delim rawHeader = map (Key.fromText . Text.Encoding.decodeUtf8) <$> runParseHeader (rawHeader <> "\n")
+parseHeader :: Word8 -> Bytes.ByteString -> IO [Text]
+parseHeader delim rawHeader = map Text.Encoding.decodeUtf8 <$> runParseHeader (rawHeader <> "\n")
  where
   errorText = "Invalid CSV header"
   headerError = ErrorCall errorText
