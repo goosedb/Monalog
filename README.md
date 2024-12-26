@@ -5,9 +5,17 @@ Monalog is terminal logs observer.
 ![Demo](./screenshot.jpg)
 
 ## Installation
+
+### From source
   1. Clone the repo
   2. run `cabal install exe:monalog`
   3. Enjoy
+
+### Using Nix
+
+```bash
+$ nix shell github:goosedb/Monalog
+```
 
 ## Running 
 ```bash
