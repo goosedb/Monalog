@@ -2,8 +2,8 @@ module Ui where
 
 import Brick qualified as B
 import Brick.Widgets.Border qualified as B
-import Brick.Widgets.Core ((<+>))
 import Control.Lens hiding (at)
+import Data.Foldable
 import Data.Generics.Labels ()
 import Data.List (sortBy)
 import Data.List.NonEmpty qualified as Nel
@@ -28,6 +28,7 @@ import Widgets.StatusBar.Types
 import Widgets.StatusBar.Ui
 import Prelude hiding (span)
 
+{-# SCC drawUi #-}
 drawUi :: AS.AppState -> [B.Widget Name]
 drawUi AS.AppState{..} =
   [ case activeWidget of
@@ -46,7 +47,8 @@ drawUi AS.AppState{..} =
                     . B.hLimit (maximum (map Text.length txtHints) + 3)
                     $ B.vBox (zipWith highlightSelected [0 ..] txtHints)
       _ -> B.emptyWidget
-  , sortExtents
+  , B.joinBorders
+      . sortExtents
       . B.border
       . B.vBox
       $ [ B.padLeftRight 1 (queryWidgetDraw isQueryWidgetActive queryView)

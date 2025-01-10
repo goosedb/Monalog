@@ -8,6 +8,7 @@ import Data.Generics.Labels ()
 import Data.Scientific (floatingOrInteger)
 import Data.Text qualified as Text
 import GHC.IsList (IsList (..))
+import Text (cleanupEscapes)
 
 data Token = Token
   { jsonpath :: [Text.Text]
@@ -67,18 +68,18 @@ tokenize = go ["$"] [] 0 []
     J.Object obj -> case KeyMap.toList obj of
       kv : kvs ->
         let
-          drawKV (Key.toText -> k, v) =
+          drawKV isFirst (Key.toText -> k, v) =
             let jpath' = jpath <> ["." <> k]
                 keys' = keys <> [k]
                 tok' t kind = Just $ Token jpath' keys' t kind
-                plus = if isAtom v && InsideArray `notElem` inside then (tok' "+ " Plus :) else (tok' "  " Normal :)
+                plus = if isAtom v && InsideArray `notElem` inside then (tok' "+ " Plus :) else (tok' (bool "  " "" isFirst) Normal :)
              in plus $ tok' k Key : tok' ": " Normal : go jpath' keys' (indent + 2) (InsideObject : inside) v
-          tabluated = (tok (Text.pack $ replicate indent ' ') Normal :)
+          tabulated = (tok (Text.pack $ replicate indent ' ') Normal :)
           drawnFirst = case inside of
-            InsideObject : _ -> newline : tabluated (drawKV kv)
-            _ -> drawKV kv
+            InsideObject : _ -> newline : drawKV True kv
+            _ -> drawKV True kv
          in
-          drawnFirst <> foldMap (tabluated . drawKV) kvs
+          drawnFirst <> foldMap (tabulated . drawKV False) kvs
       _ -> atom "{}" Normal
     J.Array arr -> case zip [0 :: Int ..] (toList arr) of
       iv : ivs ->
@@ -86,7 +87,7 @@ tokenize = go ["$"] [] 0 []
           drawIV (Text.pack . show -> i, v) =
             let jpath' = jpath <> ["[" <> i <> "]"]
                 tok' t kind = Just $ Token jpath' keys t kind
-             in tok' "  " Normal : tok' "-" Bullet : tok' " " Normal : go jpath' keys (indent + 2) (InsideArray : inside) v
+             in tok' "  " Normal : tok' "- " Bullet : go jpath' keys (indent + 2) (InsideArray : inside) v
           tabluated = (tok (Text.pack $ replicate indent ' ') Normal :)
           drawnFirst = case inside of
             InsideArray : _ -> drawIV iv
@@ -94,7 +95,7 @@ tokenize = go ["$"] [] 0 []
          in
           drawnFirst <> foldMap (tabluated . drawIV) ivs
       _ -> atom "{}" Normal
-    J.String s -> case Text.lines s of
+    J.String s -> case map cleanupEscapes $ Text.lines s of
       ls@(_ : _ : _) ->
         tok ">" Normal
           : newline

@@ -1,13 +1,12 @@
 module Widgets.Fields.Types where
 
 import Brick qualified as B
-import Config (AppConfig)
-import Data.Aeson (ToJSON)
+import Data.Aeson (FromJSON, ToJSON)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import GHC.Generics (Generic)
+import Type.Event qualified as E
 import Type.Field (Field (..), Path)
-import Type.Log (Log)
 import Type.MaxWidth
 import Type.Name
 import Type.WidgetSize (WidgetSize)
@@ -27,6 +26,7 @@ data FieldsWidget = FieldsWidget
   deriving (Generic)
 
 data FieldsViewLayout = Flatten | Nested
+  deriving (Generic, FromJSON, ToJSON)
 
 data ConfigSavingResult = SavedSuccessfully | SaveErrorHappened Text
 
@@ -36,13 +36,13 @@ data FieldsWidgetCallbacks s = FieldsWidgetCallbacks
   , fieldUnselected :: Field -> B.EventM Name s ()
   , fieldsChangedMaxSize :: Map.Map Path MaxWidth -> B.EventM Name s ()
   , holdMouse :: Name -> B.Location -> B.EventM Name s ()
-  , configSaved :: ConfigSavingResult -> B.EventM Name s ()
-  , getConfig :: B.EventM Name s AppConfig
+  , saveFieldsSet :: B.EventM Name s ()
   }
 
 data FieldWidgetEvent
-  = NewLog Log
+  = NewLog E.NewLog
   | Click FieldsWidgetName B.Location
+  | SelectField Field
   | Move FieldsWidgetName B.Location B.Location
   | Scroll Int
   | AltScroll Int
@@ -50,10 +50,3 @@ data FieldWidgetEvent
 
 mkName :: FieldsWidgetName -> Name
 mkName = WidgetName . FieldsWidgetName
-
-initialFields :: Map.Map Field FieldState
-initialFields =
-  Map.fromList
-    [ (Timestamp, FieldState{isSelected = False, maxWidth = MaxWidth 8})
-    , (Raw, FieldState{isSelected = False, maxWidth = MaxWidth 5000})
-    ]

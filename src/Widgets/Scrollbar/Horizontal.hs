@@ -6,10 +6,10 @@ import Data.Maybe (fromJust)
 renderer :: B.HScrollbarRenderer n
 renderer =
   B.HScrollbarRenderer
-    { renderHScrollbar = B.fill '='
-    , renderHScrollbarTrough = B.fill ' '
-    , renderHScrollbarHandleBefore = B.str "["
-    , renderHScrollbarHandleAfter = B.str "]"
+    { renderHScrollbar = B.fill '═'
+    , renderHScrollbarTrough = B.fill '─'
+    , renderHScrollbarHandleBefore = B.str " "
+    , renderHScrollbarHandleAfter = B.str " "
     , scrollbarHeightAllocation = 1
     }
 

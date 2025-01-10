@@ -1,32 +1,44 @@
 {-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TypeApplications #-}
 
 module Main where
 
 import App
 import Config
 import Control.Exception (catch)
-import Control.Lens (set)
+import Control.Lens (set, (&), (.~), (<&>))
+import Control.Lens qualified as Data.ByteString
+import Data.Aeson (encode, object, (.=))
+import Data.Aeson qualified as A
+import Data.Aeson qualified as J
+import Data.Aeson.Key (fromString)
 import Data.Bool (bool)
+import Data.ByteString.Lazy qualified
+import Data.Char (ord)
+import Data.Csv (HasHeader (..), decode)
+import Data.Foldable (Foldable (..))
 import Data.Generics.Labels ()
-import Data.Maybe (fromMaybe)
+import Data.List (nub)
+import Data.List.NonEmpty (some1)
+import Data.Map qualified as Map
+import Data.Maybe (catMaybes, fromMaybe)
 import Data.Monoid (Last (..))
 import Data.Text (Text)
-import qualified Data.Text as Text
+import Data.Text qualified as Text
+import Debug.Trace (trace)
 import GHC.IO.IOMode (IOMode (ReadMode))
 import Options.Applicative
 import Options.Applicative.Common (runParser)
 import System.Directory (createDirectoryIfMissing)
 import System.IO
 import System.IO.Error
-import Widgets.LogView.Types (CopyMethod (..))
-import Data.Char (ord)
 import Text.Read (readMaybe)
+import Widgets.LogView.Types (CopyMethod (..))
 
 viewerArgs :: Parser AppArguments
 viewerArgs = do
@@ -36,7 +48,7 @@ viewerArgs = do
             <> help
               "The format can be derived from the file format. \
               \If the file format is .csv, the output will be csv, otherwise it will be json."
-     in fromMaybe Stdin <$> optional (File <$> argument str i)
+     in fromMaybe Stdin <$> optional (Files <$> some1 (argument str i))
 
   format <-
     let i =
@@ -69,23 +81,24 @@ viewerArgs = do
      in optional . option reader $ i
 
   prefix <-
-    let i = long "prefix" <> short 'p' <> help "Expects prefix before every line. Supported values: empty, kube-tm"
+    let i = long "prefix" <> short 'p' <> help "Expects prefix before every (jsonl only for now) line. Supported values: empty, kube-tm"
         reader = maybeReader \case
-          "empty" -> Just Empty
+          "empty" -> Nothing
           "kube-tm" -> Just KubeTm
           _ -> Nothing
      in optional . option reader $ i
 
-  csvDelimiter <- 
-    let i = long "delimiter" <> short 'd' <> help "comma, semicolon, or any 8-bit number"
+  csvDelimiter <-
+    let i = long "separator" <> short 's' <> help "comma, semicolon, any char or 8-bit number"
         comma = fromIntegral $ ord ','
-        semicolon = fromIntegral $ ord ';' 
+        semicolon = fromIntegral $ ord ';'
         reader = maybeReader \case
-          "comma" -> Just (fromIntegral $ ord ',')
-          "semicolon" -> Just (fromIntegral $ ord ';')
-          str | Just n <- readMaybe str -> Just n 
+          "comma" -> Just comma
+          "semicolon" -> Just semicolon
+          [c] -> Just (fromIntegral $ ord c)
+          str | Just n <- readMaybe str -> Just n
           _ -> Nothing
-     in fmap (fromMaybe semicolon). optional . option reader $ i
+     in fmap (fromMaybe comma) . optional . option reader $ i
 
   pure $ AppArguments{..}
 
@@ -124,7 +137,7 @@ main =
     (prefs showHelpOnError)
     ( info
         do (Left <$> configArgs <|> Right <$> viewerArgs) <**> helper
-        do fullDesc
+        fullDesc
     )
     >>= either
       do
@@ -133,11 +146,11 @@ main =
           GetGlobalConfigPath -> globalConfigDirPath >>= putStrLn . (<> configName)
           CreateLocalConfig force -> createConfig force configName
           CreateGlobalConfig force -> globalConfigDirPath >>= createConfig force
-      do app
+      app
 
 formatReader :: ReadM Format
 formatReader = maybeReader \case
-  "json" -> Just Jsonl
+  "jsonl" -> Just Jsonl
   "csv" -> Just Csv
   _ -> Nothing
 
@@ -152,14 +165,7 @@ createConfig force path = do
     dumpConfigTo
       path
       force
-      AppConfig
-        { defaultField = Last $ Just "message"
-        , fields = Last $ Just ["message", "severity"]
-        , format = Last $ Just Jsonl
-        , copyMethod = Last $ Just Native
-        , copyCommand = Last Nothing
-        , prefix = Last Nothing
-        }
+      (mempty & #defaultField .~ Last (Just "message"))
   case result of
     Left (Config.FileExists path) -> putStrLn $ "Error saving a config: file " <> path <> " exists. Use --force to overwrite."
     Left (Config.UnexpectedError e) -> putStrLn $ "Error saving a config: " <> show e

@@ -3,9 +3,8 @@
 module Type.Name where
 
 import Brick.Types qualified as B
-import Data.Aeson (Value)
 import Data.Text (Text)
-import Type.Field (Field, Path)
+import Type.Field (Field)
 import Type.Log (Idx)
 
 newtype Name
@@ -44,6 +43,7 @@ data FieldsWidgetName
   | FieldWidgetViewport
   | FieldWidgetBorder
   | FieldWidgetHScrollBar B.ClickableScrollbarElement
+  | FieldWidgetVScrollBar B.ClickableScrollbarElement
   deriving (Eq, Ord, Show)
 
 newtype LineNumber = MkLineNumber {rawLineNumber :: Int}

@@ -15,28 +15,30 @@ library
     Buffer
     Config
     Consts
+    Column
     Copy.Native
     Copy.Osc52
     Handler
     Query
     Query.Eval
     Query.Parser
+    Query.Pretty
     SourceFormat.Csv
     SourceFormat.Json
     SourceFormat.Utils
     System
+    Text
     Type.AppState
     Type.AvailableSpace
-    Type.Config
     Type.Event
     Type.Field
     Type.Log
     Type.LogViewPosition
     Type.MaxWidth
     Type.Name
+    Type.Sort
     Type.TBool
     Type.WidgetSize
-    Type.With
     Ui
     Vty
     Widgets.Checkbox
@@ -72,8 +74,10 @@ library
     , base64-bytestring
     , brick                >=2.2 && <3.0
     , bytestring
+    , deepseq
     , cassava
-    , conduit
+    , streaming
+    , streaming-bytestring
     , containers
     , directory
     , effectful
@@ -94,6 +98,7 @@ library
     , transformers
     , typed-process
     , vector
+    , vector-algorithms
     , vty
     , vty-crossplatform
     , yaml
@@ -135,6 +140,10 @@ executable monalog
   main-is:          Main.hs
   build-depends:
     , base
+    , aeson
+    , bytestring
+    , containers
+    , cassava
     , directory
     , generic-lens
     , lens

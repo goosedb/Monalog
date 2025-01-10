@@ -7,43 +7,54 @@ import Brick qualified as B
 import Brick.BChan (newBChan, writeBChan)
 import Brick.BChan qualified as B
 import Buffer (Buffer (..), makeBuffer)
-import Conduit (MonadIO (..))
+import Column (valueColumns)
 import Config
 import Control.Applicative ((<|>))
 import Control.Concurrent (forkIO)
-import Control.Exception (finally, throwIO)
-import Control.Monad (void)
-import Data.Aeson
-import Data.Aeson.Key qualified as Key
+import Control.DeepSeq (force)
+import Control.Exception (evaluate, finally, throwIO)
+import Control.Monad (foldM, forever, void)
+import Control.Monad.IO.Class (MonadIO (..))
 import Data.Aeson.Parser qualified as P
 import Data.Attoparsec.ByteString qualified as P
-import Data.Conduit qualified as C
-import Data.Conduit.Combinators qualified as C
+import Data.ByteString qualified as Bytes
+import Data.ByteString.Lazy qualified as Bytes.Lazy
+import Data.Coerce (coerce)
+import Data.Function ((&))
+import Data.Functor ((<&>))
 import Data.Generics.Labels ()
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as Nel
-import Data.Maybe (listToMaybe)
+import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Monoid (Last (getLast))
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as Text.IO
-import Data.Traversable (forM)
 import Data.Word (Word8)
 import Effectful qualified as Eff
 import Effectful.Resource qualified as Eff
 import Effectful.State.Static.Local qualified as Eff
 import GHC.IO (catchException)
+import GHC.IO.Handle (hFlushAll, hGetLine)
 import Graphics.Vty qualified as V
 import Handler (handleEvent)
 import SourceFormat.Csv qualified as Csv
 import SourceFormat.Json qualified as Json
+import Streaming qualified as S
+import Streaming.ByteString qualified as BS
+import Streaming.ByteString.Internal as SI
+import Streaming.Prelude qualified as S
 import System.FilePath qualified as Path
 import System.IO (IOMode (ReadMode), stdin, withFile)
 import Type.AppState
 import Type.Event
 import Type.Field
+import Type.Log qualified
+import Type.LogViewPosition (LogViewPosition (LogViewPositionRight))
 import Type.Name
 import Ui (drawUi)
 import Vty (withVty)
+import Widgets.Fields.Types (FieldsViewLayout (Flatten))
 
 data AppArguments = AppArguments
   { input :: Input
@@ -54,71 +65,79 @@ data AppArguments = AppArguments
   , ignoreConfig :: Maybe ConfigType
   , prefix :: Maybe Prefix
   }
+  deriving (Show)
 
 app :: AppArguments -> IO ()
 app AppArguments{..} = do
   let run = do
         config <- loadConfig configPath ignoreConfig
         defaultFieldParsed <- parseDefaultField (defaultField <|> fromConfig config (.defaultField))
-        withVty input \vty -> do
-          ch <- newBChan maxBound
-          let formatType = reifyFormat (format <|> fromConfig config (.format)) input
-              withStream handle action = case formatType of
-                Jsonl -> action (Json.jsonLinesReader (prefix <|> fromConfig config (.prefix)) defaultFieldParsed handle)
-                Csv -> Csv.csvReader csvDelimiter handle >>= action
-          let withLogsHandle action = case input of
-                Stdin -> action stdin
-                File path -> withFile path ReadMode action
 
-          withLogsHandle \handle -> do
-            withStream handle \logsStream -> do
-              let runConduit =
-                    Eff.runEff
-                      . Eff.runResource
-                      . Eff.evalState (1 :: Int)
-                      . Eff.evalState (P.parse P.json)
-                      . C.runConduit
+        ch <- newBChan maxBound
+        let defaultFields = coerce <$> fromConfig config (.columns)
+        let formatType = reifyFormat (format <|> fromConfig config (.format)) input
+            dataStream stream = case formatType of
+              Jsonl -> pure $ Json.jsonLinesReader (prefix <|> fromConfig config (.prefix)) defaultFieldParsed stream
+              Csv -> Csv.csvReader (maybe (B.writeBChan ch . SelectFields) (\_ _ -> pure ()) defaultFields) csvDelimiter stream
+        let withLogsHandle action = case input of
+              Stdin -> dataStream BS.stdin >>= action
+              Files paths -> do
+                let go acc [] = foldM (\s path -> (s <>) <$> dataStream path) mempty (reverse acc) >>= action
+                    go acc (p : ps) = withFile p ReadMode \h -> go (BS.hGetContents h : acc) ps
+                go [] $ Nel.toList paths
 
-              Buffer{..} <- makeBuffer (writeBChan ch . NewLogs)
+        withLogsHandle \stream -> do
+          let runStream =
+                Eff.runEff
+                  . Eff.runResource
+                  . Eff.evalState (1 :: Int)
+                  . Eff.evalState (P.parse P.json)
+                  . S.mapsM_ (pure . snd . S.lazily)
 
-              void
-                . forkIO
-                . runConduit
-                $ logsStream
-                  C..| C.mapM (liftIO . pushBuffer)
-                  C..| C.sinkNull
+          Buffer{..} <- makeBuffer (writeBChan ch . NewLogs)
 
-              defaultFields <- forM (fromConfig config (.fields)) do
-                traverse (maybe (throwIO $ MkFatalError "Failed to parse default fields from config") pure . parseField)
+          stream
+            & S.map (\l -> NewLog l (valueColumns l.value))
+            & S.mapM (liftIO . evaluate . force)
+            & S.mapM (liftIO . pushBuffer)
+            & runStream
+            & forkIO
+            & void
 
-              freshState <-
-                initialState
-                  (fromConfig config (.copyCommand))
-                  (fromConfig config (.copyMethod))
-                  defaultFields
+          putStrLn "2"
 
-              finally
-                do
-                  void $ B.customMain
-                    do vty
-                    do pure vty
-                    do Just ch
-                    do brickApp formatType config ch
-                    do freshState
-                do
-                  V.shutdown vty >> killBuffer
+          freshState <-
+            initialState
+              (fromMaybe False $ fromConfig config (.textWrap))
+              (fromMaybe LogViewPositionRight $ fromConfig config (.logViewSide))
+              (fromMaybe Flatten $ fromConfig config (.fieldsLayout))
+              input
+              (fromConfig config (.copyCommand))
+              (fromConfig config (.copyMethod))
+              defaultFields
+
+          withVty input \vty -> finally
+            do
+              void $ B.customMain
+                do vty
+                do pure vty
+                do Just ch
+                do brickApp ch
+                do freshState
+            do
+              V.shutdown vty >> killBuffer
 
   run `catchException` \case MkFatalError e -> Text.IO.putStrLn e
  where
   fromConfig :: AppConfig -> (AppConfig -> Last a) -> Maybe a
   fromConfig cfg v = getLast . v $ cfg
 
-brickApp :: Format -> AppConfig -> B.BChan Event -> B.App AppState Event Name
-brickApp format config ch =
+brickApp :: B.BChan Event -> B.App AppState Event Name
+brickApp ch =
   B.App
     { appDraw = drawUi
     , appChooseCursor = const listToMaybe
-    , appHandleEvent = handleEvent format config ch
+    , appHandleEvent = handleEvent ch
     , appStartEvent = do
         vty <- B.getVtyHandle
         let output = V.outputIface vty
@@ -129,13 +148,13 @@ brickApp format config ch =
 reifyFormat :: Maybe Format -> Input -> Format
 reifyFormat format input = case format of
   Just fmt -> fmt
-  Nothing | File path <- input ->
+  Nothing | Files (path :| _) <- input ->
     case Path.takeExtension path of
       ".csv" -> Csv
       _ -> Jsonl
   _ -> Jsonl
 
-parseDefaultField :: Maybe Text -> IO [Key.Key]
+parseDefaultField :: Maybe Text -> IO Path
 parseDefaultField defaultField = maybe
   do pure ["message"]
   do
@@ -147,8 +166,7 @@ parseDefaultField defaultField = maybe
 
 parseField :: Text -> Maybe Field
 parseField "@timestamp" = Just Timestamp
-parseField "@raw" = Just Raw
 parseField k = Field <$> parsePath k
 
-parsePath :: Text -> Maybe [Key]
-parsePath = fmap Nel.toList . Nel.nonEmpty . map Key.fromText . filter (not . Text.null) . Text.splitOn "."
+parsePath :: Text -> Maybe [Text]
+parsePath = fmap Nel.toList . Nel.nonEmpty . filter (not . Text.null) . Text.splitOn "."

@@ -7,11 +7,11 @@ import Brick (clickable)
 import Brick qualified as B
 import Brick.Widgets.Edit qualified as B
 import Control.Lens (view)
-
 import Data.Bifunctor (Bifunctor (..))
 import Data.Foldable (Foldable (..))
 import Data.Generics.Labels ()
 import Data.Sequence qualified as Seq
+import Data.Text qualified as Text
 import Type.AvailableSpace
 import Type.Name
 import Type.TBool (TBool, pattern Is)
@@ -42,7 +42,7 @@ logViewWidgetDraw isActive availableSpace LogViewWidget{..} =
               ]
           , B.padBottom B.Max
               . clickable (mkName LogViewWidgetContent)
-              . B.cached (mkName LogViewWidgetContent)
+              -- . B.cached (mkName LogViewWidgetContent)
               $ B.Widget
                 { B.hSize = B.Greedy
                 , B.vSize = B.Greedy
@@ -55,7 +55,7 @@ logViewWidgetDraw isActive availableSpace LogViewWidget{..} =
                           Just c -> (Right c, Seq.length c)
                           Nothing ->
                             withLength
-                              . second Seq.fromList
+                              . second (Seq.fromList . take (h' * h'))
                               . generateCache (if textWrap then Just w else Nothing) selectedLog jsonpathFilter
                               $ showJsonpath
                         d = fromIntegral @_ @Double
@@ -75,11 +75,11 @@ logViewWidgetDraw isActive availableSpace LogViewWidget{..} =
                             map
                               ( \i ->
                                   if i <= offsetFize
-                                    then B.txt " "
+                                    then B.txt "│"
                                     else
                                       if i <= (scrollSize + offsetFize)
-                                        then B.clickable (mkName LogViewWidgetScrollBar) $ B.txt "|"
-                                        else B.txt " "
+                                        then B.clickable (mkName LogViewWidgetScrollBar) $ B.txt "║"
+                                        else B.txt "│"
                               )
                               [1 .. h']
                         ]
@@ -121,5 +121,5 @@ logViewWidgetDraw isActive availableSpace LogViewWidget{..} =
             )
      in B.vBox
           . map
-            (B.hBox . map (\t@Token{..} -> clickToFilter t . clickToCopy t . colorize t $ B.txt text))
+            (B.hBox . map (\t@Token{..} -> clickToFilter t . clickToCopy t . colorize t . B.txt $ Text.filter (/= '\r') text))
           . toList

@@ -2,6 +2,7 @@
 
 module Type.Log where
 
+import Control.DeepSeq (NFData)
 import Data.Aeson (Value)
 import Data.Time (UTCTime)
 import Data.Vector qualified as Vec
@@ -9,9 +10,11 @@ import Data.Vector.Mutable qualified as MVec
 import GHC.Generics (Generic)
 
 newtype Idx = Idx {rawIdx :: Int}
-  deriving newtype (Show, Eq, Ord)
+  deriving newtype (Show, Eq, Ord, NFData)
+
 data Log = Log {idx :: Idx, timestamp :: UTCTime, value :: Value}
-  deriving (Show)
+  deriving (Show, Generic)
+  deriving anyclass (NFData)
 
 data Mutable
 

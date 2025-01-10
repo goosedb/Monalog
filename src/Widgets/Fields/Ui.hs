@@ -1,14 +1,19 @@
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+
+{-# HLINT ignore "Functor law" #-}
+{-# HLINT ignore "Redundant fmap" #-}
 module Widgets.Fields.Ui where
 
 import Brick qualified as B
-import Data.Aeson (Key, ToJSON)
-import Data.Aeson.Key qualified as Key
+import Control.Lens (view)
+import Data.Aeson (ToJSON)
 import Data.Foldable qualified as F
 import Data.Function ((&))
 import Data.Generics.Labels ()
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 import Data.Maybe (mapMaybe)
+import Data.Text (Text)
 import Data.Text qualified as Text
 import GHC.Generics (Generic)
 import Type.Field
@@ -25,19 +30,38 @@ fieldsWidgetDraw FieldsWidget{..} =
       [ B.clickable (mkName FieldWidgetLayoutButton) $ B.txt case layout of
           Flatten -> "[Flatten]"
           Nested -> "[Nested]"
-      , B.withClickableHScrollBars (\e _ -> mkName (FieldWidgetHScrollBar e))
-          . B.withHScrollBarRenderer
-            HScroll.renderer
-          . B.withHScrollBars B.OnBottom
-          . B.withVScrollBarRenderer
-            VScroll.renderer
-          . B.withVScrollBars B.OnRight
+      , scrolls
           . B.viewport (mkName FieldWidgetViewport) B.Both
           . B.hLimit contentWidth
           $ B.vBox fieldsWidgets
       , B.clickable (mkName FieldWidgetSaveConfig) $ B.txt "[Save]"
       ]
  where
+  scrolls widget =
+    B.Widget
+      { B.hSize = B.Greedy
+      , B.vSize = B.Greedy
+      , B.render = do
+          h' <- view B.availHeightL
+          w' <- view B.availWidthL
+          let enableVScroll = h' < length fieldsWidgets
+          let enableHScroll = (if enableVScroll then w' + 1 else w' + 2) < contentWidth
+          let vscroll =
+                if enableVScroll
+                  then B.withVScrollBarRenderer VScroll.renderer . B.withVScrollBars B.OnRight
+                  else id
+          let hscroll =
+                if enableHScroll
+                  then B.withHScrollBarRenderer HScroll.renderer . B.withHScrollBars B.OnBottom
+                  else id
+          B.render
+            . B.withClickableHScrollBars (\e _ -> mkName (FieldWidgetHScrollBar e))
+            . B.withClickableVScrollBars (\e _ -> mkName (FieldWidgetVScrollBar e))
+            . vscroll
+            . hscroll
+            $ widget
+      }
+
   recMap = buildRecMap fields
   drawRec path n m =
     Map.toList m & map \(k, entry) -> case entry of
@@ -82,20 +106,20 @@ fieldsWidgetDraw FieldsWidget{..} =
       , drawCheckBox
           isSelected
           (mkName $ FieldWidgetField (Field (path <> [k])))
-          ((if not (null path) then ("." <>) else id) (Key.toText k))
+          ((if not (null path) then ("." <>) else id) k)
       ]
 
   fieldsList = Map.toList fields
 
 data FieldRecEntry a
   = FieldRecEntry a
-  | FieldRecNest (Map.Map Key (FieldRecEntry a))
+  | FieldRecNest (Map.Map Text (FieldRecEntry a))
   deriving (Show, Generic, ToJSON)
 
-buildRecMap :: Map.Map Field a -> Map.Map Key (FieldRecEntry a)
+buildRecMap :: Map.Map Field a -> Map.Map Text (FieldRecEntry a)
 buildRecMap = F.foldl' (\a (f, v) -> case f of Field ks -> insert ks v a; _ -> a) mempty . Map.toList
 
-insert :: [Key] -> a -> Map.Map Key (FieldRecEntry a) -> Map.Map Key (FieldRecEntry a)
+insert :: Path -> a -> Map.Map Text (FieldRecEntry a) -> Map.Map Text (FieldRecEntry a)
 insert [] _ = id
 insert [x] a = Map.insert x (FieldRecEntry a)
 insert (x : xs) a = Map.alter
