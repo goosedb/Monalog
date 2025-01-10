@@ -22,6 +22,8 @@ makeBuffer sink = do
       flushTQueue buffer >>= \case
         [] -> retry
         vals -> pure vals
+    atomically do
+      writeTVar canFlush False
     sink vals
   pure
     Buffer
