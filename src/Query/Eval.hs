@@ -27,11 +27,25 @@ evalFilter v = go
     Not q' -> BoolResult $ not . toBool . go $ q'
     Eq ql qr -> BoolResult (eq ql qr)
     Path (Located{value = path}) -> ValueResult (getByPath path v)
-    Value val -> ValueResult val
+    JsonValue val -> ValueResult val
+    StringValue txt _ -> ValueResult (String txt)
     Query.Array arr -> ValueResult $ Data.Aeson.Array $ fromList $ map (toValue . go) arr
-    Like l r -> BoolResult case (go l, go r) of
+    Like l r -> BoolResult $ case (go l, go r) of
       (ValueResult (String ls), ValueResult (String lr)) -> lr `Text.isInfixOf` ls
       _ -> False
+    Ilike l r -> BoolResult $ case (l, r) of
+      (StringValue _ lsLower, StringValue _ lrLower) ->
+        lrLower `Text.isInfixOf` lsLower
+      (StringValue _ lsLower, r') -> case go r' of
+        ValueResult (String lr) -> Text.toLower lr `Text.isInfixOf` lsLower
+        _ -> False
+      (l', StringValue _ lrLower) -> case go l' of
+        ValueResult (String ls) -> lrLower `Text.isInfixOf` Text.toLower ls
+        _ -> False
+      (l', r') -> case (go l', go r') of
+        (ValueResult (String ls), ValueResult (String lr)) ->
+          Text.toLower lr `Text.isInfixOf` Text.toLower ls
+        _ -> False
     In a as -> case (toValue (go a), toArray (go as)) of
       (a', as') -> BoolResult $ elem a' as'
     Gt ql qr -> BoolResult (gt ql qr)

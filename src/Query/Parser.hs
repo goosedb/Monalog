@@ -54,6 +54,9 @@ fieldParserLocated = do
 fieldParser :: Parser Field
 fieldParser = fmap (.value) fieldParserLocated
 
+mkStringValue :: Text -> Filter
+mkStringValue txt = StringValue txt (Text.toLower txt)
+
 filterParser :: Parser Filter
 filterParser = expr
  where
@@ -62,14 +65,22 @@ filterParser = expr
 
   term =
     braced expr
-      <|> (Value <$> valueParser <* hspace)
+      <|> jsonOrStringVal
       <|> (Path <$> pathParser <* hspace)
       <|> (Query.Array <$> array <* hspace)
 
-  array = between
-    do "[" >> hspace
-    do "]" >> hspace
-    do (expr <* hspace) `sepBy` ("," >> hspace)
+  jsonOrStringVal :: Parser Filter
+  jsonOrStringVal = do
+    val <- valueParser <* hspace
+    case val of
+      String txt -> pure $ mkStringValue txt
+      _ -> pure $ JsonValue val
+
+  array =
+    between
+      (do "[" >> hspace)
+      (do "]" >> hspace)
+      (do (expr <* hspace) `sepBy` ("," >> hspace))
 
   table :: [[Operator Parser Filter]]
   table =
@@ -82,11 +93,13 @@ filterParser = expr
       , binary ">" Gt
       , binary "<" Lt
       , binary "like" Like
+      , binary "ilike" Ilike
       , binary "in" In
       ]
     , [binary "&&" And]
     , [binary "||" Or]
     ]
+
   binary name f = InfixL (f <$ (string name <* hspace))
   prefix name f = Prefix (f <$ (string name <* hspace))
 
