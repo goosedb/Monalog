@@ -43,10 +43,12 @@ filterPretty = go
     Lte l r -> prettyBin "<=" e l r
     Gte l r -> prettyBin ">=" e l r
     Like l r -> prettyBin "like" e l r
+    Ilike l r -> prettyBin "ilike" e l r
     In l r -> prettyBin "in" e l r
     Path Located{value} -> pathPretty value
     Array vs -> "[" <> Text.intercalate ", " (map go vs) <> "]"
-    Value v -> prettyValue v
+    JsonValue v -> prettyValue v
+    StringValue txt _ -> prettyString txt
 
   lessPriority r e = priority r > priority e
   braceOfLessPriority p e = (if lessPriority p e then braced else id) (go e)
@@ -59,10 +61,12 @@ filterPretty = go
     Eq _ _ -> 2
     Gt _ _ -> 2
     Like _ _ -> 2
+    Ilike _ _ -> 2
     In _ _ -> 2
     Path _ -> maxBound
     Array _ -> maxBound
-    Value _ -> maxBound
+    JsonValue _ -> maxBound
+    StringValue _ _ -> maxBound
     Neq _ _ -> maxBound
     Lt _ _ -> 2
     Lte _ _ -> 2
@@ -76,6 +80,7 @@ filterPretty = go
     J.String t -> "\"" <> escape t <> "\""
     J.Number n -> Text.pack . either @Double @_ @Int show show . S.floatingOrInteger $ n
     _ -> ""
+  prettyString txt = "\"" <> escape txt <> "\""
 
 isAtom :: Filter -> Bool
 isAtom = \case
@@ -85,6 +90,7 @@ isAtom = \case
   Eq _ _ -> False
   Gt _ _ -> False
   Like _ _ -> False
+  Ilike _ _ -> False
   In _ _ -> False
   Neq _ _ -> False
   Lt _ _ -> False
@@ -92,7 +98,8 @@ isAtom = \case
   Gte _ _ -> False
   Path _ -> True
   Array _ -> True
-  Value _ -> True
+  JsonValue _ -> True
+  StringValue _ _ -> True
 
 pathPretty :: [Text] -> Text
 pathPretty [p] | Just ('@', xs) <- Text.uncons p, Text.all (`Set.member` specialFieldSymbols) xs = p

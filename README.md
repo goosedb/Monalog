@@ -81,6 +81,7 @@ Mouse is fully supported. You can
 | `&&`, `\|\|` | Works with `bool`. For operands of other types returns `false`                                         |
 | `not`        | Negates argument                                                                                       |
 | `like`       | Fuzzy text comparison                                                                                  |
+| `ilike`      | Similar to like, but performs a case-insensitive comparison                                            |
 | `in`         | Checks if left operand is element of list in right operand`                                            |
 
 | Literal | Example                                    |

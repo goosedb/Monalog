@@ -112,7 +112,7 @@ queryWidgetHandleEvent widgetState QueryWidgetCallbacks{..} = \case
 
   addFilter k v = do
     content <- Text.strip <$> getEditorContent
-    let kv = Path (Located (map pathPiecePretty k) dummySpan) `Eq` Value v
+    let kv = Path (Located (map pathPiecePretty k) dummySpan) `Eq` JsonValue v
         keyAlreadyExists (Path a `Eq` _) = a.value == k
         keyAlreadyExists (a `And` b) = keyAlreadyExists a || keyAlreadyExists b
         keyAlreadyExists _ = False
@@ -173,8 +173,10 @@ findCompletion query cursor fields =
       Lte a b -> queryCompletion a <|> queryCompletion b
       Gte a b -> queryCompletion a <|> queryCompletion b
       Like a b -> queryCompletion a <|> queryCompletion b
+      Ilike a b -> queryCompletion a <|> queryCompletion b
       In a b -> queryCompletion a <|> queryCompletion b
-      Value _ -> Nothing
+      JsonValue _ -> Nothing
+      StringValue _ _ -> Nothing
       Array arr -> asum (map queryCompletion arr)
     sortCompletion = \case
       [] -> empty
