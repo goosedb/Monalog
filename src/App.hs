@@ -13,15 +13,12 @@ import Control.Applicative ((<|>))
 import Control.Concurrent (forkIO)
 import Control.DeepSeq (force)
 import Control.Exception (evaluate, finally, throwIO)
-import Control.Monad (foldM, forever, void)
+import Control.Monad (foldM, void)
 import Control.Monad.IO.Class (MonadIO (..))
 import Data.Aeson.Parser qualified as P
 import Data.Attoparsec.ByteString qualified as P
-import Data.ByteString qualified as Bytes
-import Data.ByteString.Lazy qualified as Bytes.Lazy
 import Data.Coerce (coerce)
 import Data.Function ((&))
-import Data.Functor ((<&>))
 import Data.Generics.Labels ()
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as Nel
@@ -35,17 +32,15 @@ import Effectful qualified as Eff
 import Effectful.Resource qualified as Eff
 import Effectful.State.Static.Local qualified as Eff
 import GHC.IO (catchException)
-import GHC.IO.Handle (hFlushAll, hGetLine)
 import Graphics.Vty qualified as V
 import Handler (handleEvent)
 import SourceFormat.Csv qualified as Csv
 import SourceFormat.Json qualified as Json
 import Streaming qualified as S
 import Streaming.ByteString qualified as BS
-import Streaming.ByteString.Internal as SI
 import Streaming.Prelude qualified as S
 import System.FilePath qualified as Path
-import System.IO (IOMode (ReadMode), stdin, withFile)
+import System.IO (IOMode (ReadMode), withFile)
 import Type.AppState
 import Type.Event
 import Type.Field
@@ -103,8 +98,6 @@ app AppArguments{..} = do
             & runStream
             & forkIO
             & void
-
-          putStrLn "2"
 
           freshState <-
             initialState
